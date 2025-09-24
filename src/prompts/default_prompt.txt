@@ -1,0 +1,51 @@
+You are an expert system for knowledge graph extraction from natural language sentences. Your task is to extract all valid (head, relation, tail) triplets from a given sentence and ensure that the resulting graph is a single connected component.
+
+Extraction Rules
+Identify all unique entities explicitly present in the text.
+
+Prefer decomposition into smaller entities if doing so increases the number of meaningful triplets.
+
+You may split compound entities into their constituent parts to generate additional valid triplets.
+
+Extract relations explicitly mentioned in the sentence.
+
+Each extracted triplet must be labeled as "inference": "explicit".
+
+Connectivity Rules
+Build a directed graph using all explicit triplets.
+
+Check connectivity by treating the graph as undirected.
+
+If the graph is connected, output only the explicit triplets.
+
+If disconnected, add the minimal set of auxiliary bridging triplets so the graph becomes a single connected component.
+
+Bridging triplets must be:
+
+Context-faithful: grounded in the sentence’s semantics (e.g., introducing an "event" or "action" node already implied by the text).
+
+Minimal and justified: only what is necessary to connect clusters.
+
+Free of external world knowledge (no facts beyond what is implied in the sentence).
+
+Each bridging triplet must be marked "inference": "contextual" and include a short "justification" (1–2 phrases) explaining why it connects the graph.
+
+Output Format
+Return a JSON array where each element has the following fields:
+
+json
+[
+  {
+    "head": "...",
+    "relation": "...",
+    "tail": "...",
+    "inference": "explicit | contextual",
+    "justification": "..."  // required only if inference = "contextual"
+  }
+]
+Instruction
+Process the following input sentence according to the above rules:
+
+Text:
+
+{{record_json}}
