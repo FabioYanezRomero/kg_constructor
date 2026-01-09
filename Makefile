@@ -12,7 +12,7 @@ $(VENV)/bin/activate:
 	$(PIP) install -r requirements.txt
 
 run:
-	$(VENV)/bin/python -m kg_constructor $(ARGS)
+	PYTHONPATH=src $(VENV)/bin/python -m kg_constructor $(ARGS)
 
 format:
 	$(VENV)/bin/python -m black src
@@ -26,6 +26,23 @@ docker-build:
 docker-run:
 	docker run --rm --network host \
 		-v $(PWD)/data/output:/app/data/output \
+		-v $(PWD)/data/legal:/app/data/legal \
 		-e VLLM_URL=$${VLLM_URL:-http://localhost:8000} \
 		-e VLLM_API_KEY=$${VLLM_API_KEY:-} \
 		kg-constructor $(ARGS)
+
+
+docker-start:
+	docker run -it --rm --network host \
+		-v $(PWD):/app \
+		--entrypoint bash \
+		kg-constructor
+
+docker-dev:
+	docker run -d --name kg-dev --network host \
+		-v $(PWD):/app \
+		--entrypoint sleep \
+		kg-constructor infinity
+
+docker-stop:
+	docker stop kg-dev && docker rm kg-dev

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from typing import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
@@ -20,28 +21,103 @@ def clean_code_fence(text: str) -> str:
     """Strip Markdown code fences from a string."""
 
     stripped = text.strip()
-    if not stripped.startswith("```"):
-        return stripped
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
 
-    lines = stripped.splitlines()
-    # Remove opening fence with optional language tag.
-    if lines and lines[0].startswith("```"):
-        lines = lines[1:]
-    # Remove trailing fence if present.
-    if lines and lines[-1].startswith("```"):
-        lines = lines[:-1]
-    return "\n".join(lines).strip()
+    fence_pos = stripped.find("```")
+    if fence_pos != -1:
+        after_fence = stripped[fence_pos + 3 :]
+        newline_pos = after_fence.find("\n")
+        if newline_pos != -1:
+            after_lang = after_fence[newline_pos + 1 :]
+        else:
+            after_lang = ""
+        closing_pos = after_lang.find("```")
+        if closing_pos != -1:
+            return after_lang[:closing_pos].strip()
+
+    return stripped
+
+
+_KEY_PATTERN = re.compile(r'(?m)(^|[\{\[,])\s*(?P<key>[A-Za-z0-9_]+)\s*:(?=\s)')
+_STRING_VALUE_PATTERN = re.compile(
+    r'("(?P<key>head|relation|tail|inference|justification|source|target|type|name|label|role|relation_type)"\s*:\s*)(?P<value>(?:[^"\s\[{][^,\n\r}\]]*))(?P<suffix>\s*[\},\n])',
+    flags=re.IGNORECASE,
+)
+_TRAILING_COMMA_PATTERN = re.compile(r',\s*([\]}])')
+_INVALID_ESCAPE_PATTERN = re.compile(r'\\(?P<char>[^"\\/bfnrtu])')
+
+
+def _attempt_parse(text: str, transforms: tuple[Callable[[str], str], ...] = ()) -> Any | None:
+    candidate = text
+    for transform in transforms:
+        candidate = transform(candidate)
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+
+
+def _quote_object_keys(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        prefix = match.group(1)
+        key = match.group("key")
+        return f"{prefix} \"{key}\":"
+
+    return _KEY_PATTERN.sub(replace, text)
+
+
+def _quote_common_string_values(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        prefix = match.group(1)
+        value = match.group("value").strip()
+        suffix = match.group("suffix")
+        lowered = value.lower()
+        if lowered in {"true", "false", "null"}:
+            return match.group(0)
+        if re.fullmatch(r"-?\d+(?:\.\d+)?", value):
+            return match.group(0)
+        return f"{prefix}\"{value}\"{suffix}"
+
+    return _STRING_VALUE_PATTERN.sub(replace, text)
+
+
+def _strip_trailing_commas(text: str) -> str:
+    return _TRAILING_COMMA_PATTERN.sub(r"\1", text)
+
+
+def _escape_invalid_sequences(text: str) -> str:
+    return _INVALID_ESCAPE_PATTERN.sub(lambda match: r"\\" + match.group("char"), text)
 
 
 def try_load_json(text: str) -> Any | None:
-    """Attempt to parse a JSON payload from text."""
+    """Attempt to parse a JSON payload from text, applying minor repairs when needed."""
 
     if not text:
         return None
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return None
+
+    direct = _attempt_parse(text)
+    if direct is not None:
+        return direct
+
+    repaired = _attempt_parse(
+        text,
+        transforms=(
+            _quote_object_keys,
+            _quote_common_string_values,
+            _escape_invalid_sequences,
+            _strip_trailing_commas,
+        ),
+    )
+    if repaired is not None:
+        return repaired
+
+    return None
 
 
 def slugify(value: str) -> str:

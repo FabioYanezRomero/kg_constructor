@@ -25,25 +25,67 @@ from .networkx_export import build_networkx_graph
 app = typer.Typer(help="Export cleaned knowledge graphs to NetworkX pickles.")
 
 
+def _fallback_graph(document: dict, source_path: Path) -> dict | None:
+    input_record = document.get("input_record") or {}
+    text = None
+    if isinstance(input_record, dict):
+        if isinstance(input_record.get("text"), str):
+            text = input_record["text"].strip()
+        elif isinstance(input_record.get("sentence"), str):
+            text = input_record["sentence"].strip()
+    if not text:
+        return None
+
+    node_id = sanitize_path_component(document.get("record_id", "record")) or "record"
+    return {
+        "nodes": [
+            {
+                "id": node_id,
+                "type": "sentence",
+                "properties": {"text": text},
+            }
+        ],
+        "edges": [],
+    }
+
+
 def ensure_graph(document: dict, source_path: Path) -> dict | None:
     """Return a populated graph dict, attempting to parse raw_response if needed."""
 
     graph = document.get("graph")
     if isinstance(graph, dict):
-        return graph
+        if graph.get("nodes"):
+            return graph
+        fallback = _fallback_graph(document, source_path)
+        if fallback:
+            document["graph"] = fallback
+            return fallback
+        return None
 
     raw_response = document.get("raw_response")
     if not isinstance(raw_response, str) or not raw_response.strip():
+        fallback = _fallback_graph(document, source_path)
+        if fallback:
+            document["graph"] = fallback
+            return fallback
         return None
 
     cleaned = clean_code_fence(raw_response)
     payload = try_load_json(cleaned)
     if payload is None:
+        fallback = _fallback_graph(document, source_path)
+        if fallback:
+            document["graph"] = fallback
+            return fallback
         typer.secho(f"Failed to parse JSON from {source_path}", fg=typer.colors.YELLOW)
         return None
 
     triples = triples_from_payload(payload)
     if not triples:
+        fallback = _fallback_graph(document, source_path)
+        if fallback:
+            document["graph"] = fallback
+            return fallback
         typer.secho(f"No triples extracted from {source_path}", fg=typer.colors.YELLOW)
         return None
 
@@ -64,10 +106,23 @@ def save_graph(document: dict, graph: dict, output_root: Path) -> Path:
     destination_dir = output_root / dataset_dir / split_dir
     destination_dir.mkdir(parents=True, exist_ok=True)
 
+    input_record = document.get("input_record") if isinstance(document.get("input_record"), dict) else {}
+    label = input_record.get("label") if isinstance(input_record, dict) else None
+    label_text = input_record.get("label_text") or input_record.get("sentence_label") if isinstance(input_record, dict) else None
+
     nx_graph = build_networkx_graph({"graph": graph})
+    payload = {
+        "dataset": dataset,
+        "split": split,
+        "record_id": record_id,
+        "label": label,
+        "label_text": label_text,
+        "graph": nx_graph,
+    }
+
     output_path = destination_dir / f"{record_name}.gpickle"
     with output_path.open("wb") as buffer:
-        pickle.dump(nx_graph, buffer)
+        pickle.dump(payload, buffer)
     return output_path
 
 

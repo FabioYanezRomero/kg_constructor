@@ -1,2 +1,8 @@
 data/
 outputs/
+.venv/
+cleaned/
+processed/
+processed_test/
+visualizations/
+__pycache__

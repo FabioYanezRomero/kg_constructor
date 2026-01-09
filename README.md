@@ -19,6 +19,18 @@ make install            # create a virtual environment and install dependencies
 make run ARGS="--dataset <namespace/dataset> --split train --model pytorch/gemma-3-12b-it-INT4"
 ```
 
+### Legal backgrounds quickstart
+Use the dedicated CLI command to transform the legal CSV into the expected format and trigger graph generation without touching the generic pipeline flags:
+
+```bash
+python -m kg_constructor legal \
+  --csv-path data/legal/sample_data.csv \
+  --sample-size 10 \
+  --model abhishekchohan/gemma-3-12b-it-quantized-W4A16
+```
+
+The command automatically points the Hugging Face loader to the CSV (via `LEGAL_BACKGROUND_SOURCE`), enables `HF_DATASETS_TRUST_REMOTE_CODE`, and uses the tailored prompt at `src/prompts/legal_background_prompt.txt`. Override `--prompt-path` only if you want to experiment with alternative instructions.
+
 The first execution will download the dataset into the local Hugging Face cache. Ensure the vLLM server is running before invoking the command.
 
 ## Command-line usage
@@ -86,6 +98,17 @@ PYTHONPATH=src python -m kg_constructor.networkx_export data/output/SetFit__ag_n
 ```
 
 Supported formats: `graphml`, `gpickle`, and `json` (node-link schema). The exporter preserves all node and edge attributes present in the structured graph.
+
+### Batching graph pickles
+Once individual `.gpickle` files exist, you can collapse them into larger batch files to reduce filesystem pressure:
+
+```bash
+PYTHONPATH=src python -m kg_constructor.batch_graphs outputs outputs_batched \
+  --batch-size 1000 --delete-source
+```
+
+Each batch file stores a list of `{record_id, graph}` entries for a single dataset split. Omit `--delete-source` if you prefer to keep the original per-record files.
+The per-record payload also preserves the original dataset label information (`label`, `label_text`) alongside the NetworkX graph.
 
 ## Docker workflow
 ```bash
