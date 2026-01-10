@@ -24,26 +24,50 @@ class BaseLLMClient(ABC):
         prompt_description: str,
         examples: list[Any] | None = None,
         format_type: type | None = None,
-        temperature: float = 0.0,
+        temperature: float | None = None,
         max_tokens: int | None = None,
         **kwargs: Any
     ) -> list[dict[str, Any]]:
-        """Extract structured information from text.
+        """Extract structured information from text with source grounding.
 
         Args:
-            text: The input text to extract information from
-            prompt_description: Instructions for what to extract
-            examples: Optional list of few-shot examples
-            format_type: Optional Pydantic model for structured output
-            temperature: Sampling temperature (0.0 = deterministic)
+            text: The input text
+            prompt_description: Instructions for extraction
+            examples: Few-shot examples
+            format_type: Pydantic model for schema
+            temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
-            **kwargs: Additional provider-specific parameters
 
         Returns:
-            List of extracted triples as dictionaries
+            List of dictionaries with source grounding
+        """
+        pass
 
-        Raises:
-            LLMClientError: If extraction fails
+    @abstractmethod
+    def generate_json(
+        self,
+        text: str,
+        prompt_description: str,
+        format_type: type,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        """Generate structured JSON items directly from text.
+
+        Unlike extract(), this method should NOT attempt to ground extractions
+        in the source text (i.e., no char positions required). This is useful
+        for high-level inference and bridging.
+
+        Args:
+            text: The input text
+            prompt_description: Instructions for generation
+            format_type: Pydantic model for schema enforcement
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+
+        Returns:
+            List of dictionaries matching the schema
         """
         pass
 

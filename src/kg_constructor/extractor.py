@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import langextract as lx
 from pydantic import BaseModel, Field
@@ -18,12 +18,12 @@ class Triple(BaseModel):
     head: str = Field(description="The source entity in the relationship")
     relation: str = Field(description="The relationship type connecting head to tail")
     tail: str = Field(description="The target entity in the relationship")
-    inference: str = Field(
-        description="Whether the triple is 'explicit' (directly stated) or 'contextual' (inferred for connectivity)"
+    inference: Literal["explicit", "contextual"] = Field(
+        description="MUST be 'explicit' if directly stated, or 'contextual' if inferred for connectivity."
     )
     justification: str | None = Field(
         default=None,
-        description="Explanation for contextual triples (required when inference='contextual')"
+        description="REQUIRED for 'contextual' triples. Explain the logical link between entities."
     )
 
 
@@ -39,14 +39,16 @@ class KnowledgeGraphExtractor:
         self,
         client: BaseLLMClient | None = None,
         client_config: ClientConfig | None = None,
-        prompt_path: Path | str | None = None
+        prompt_path: Path | str | None = None,
+        bridging_prompt_path: Path | str | None = None
     ) -> None:
         """Initialize the extractor.
 
         Args:
             client: Pre-configured client instance (takes precedence)
             client_config: Configuration for creating a client
-            prompt_path: Path to prompt template file (default: prompts/default_prompt.txt)
+            prompt_path: Path to prompt template file for initial extraction (default: prompts/default_prompt.txt)
+            bridging_prompt_path: Path to prompt template for bridging/refinement (optional, uses hardcoded if not provided)
 
         Raises:
             ValueError: If neither client nor client_config is provided
@@ -60,7 +62,7 @@ class KnowledgeGraphExtractor:
             # Default to Gemini
             self.client = create_client(ClientConfig(client_type="gemini"))
 
-        # Load prompt template
+        # Load prompt template for initial extraction
         if prompt_path is None:
             # Default to the generic prompt
             prompt_path = Path(__file__).parent.parent / "prompts" / "default_prompt.txt"
@@ -71,6 +73,14 @@ class KnowledgeGraphExtractor:
             raise FileNotFoundError(f"Prompt template not found: {prompt_path}")
 
         self.prompt_template = prompt_path.read_text(encoding="utf-8")
+
+        # Load bridging prompt template (optional)
+        self.bridging_prompt_template = None
+        if bridging_prompt_path is not None:
+            bridging_prompt_path = Path(bridging_prompt_path)
+            if not bridging_prompt_path.exists():
+                raise FileNotFoundError(f"Bridging prompt template not found: {bridging_prompt_path}")
+            self.bridging_prompt_template = bridging_prompt_path.read_text(encoding="utf-8")
 
     def _prepare_prompt(self, record: dict[str, Any]) -> str:
         """Prepare the extraction prompt from template.
@@ -89,43 +99,152 @@ class KnowledgeGraphExtractor:
         return prompt
 
     def _create_examples(self) -> list[Any]:
-        """Create few-shot examples for extraction.
+        """Create few-shot examples for langextract extraction.
 
         Returns:
-            List of ExampleData with embedded Triple models
+            List of ExampleData with Triple schema attributes.
+            Uses attributes dict format compatible with langextract + Gemini.
         """
-        # Example text
+        # Example 1: Employment relationships
         text1 = "John Smith works at Google Inc. as a senior software engineer."
-
-        # Create Extraction objects with Triple models embedded
-        # Note: For Pydantic structured extraction, we don't use the data field
-        # Instead, we create simple text-based extractions
         extractions1 = [
             lx.data.Extraction(
                 extraction_class="Triple",
-                extraction_text="John Smith works_at Google Inc.",
-                char_interval=lx.data.CharInterval(start_pos=0, end_pos=len(text1))
+                extraction_text="John Smith works at Google Inc.",
+                char_interval=lx.data.CharInterval(start_pos=0, end_pos=31),
+                attributes={
+                    "head": "John Smith",
+                    "relation": "works_at",
+                    "tail": "Google Inc.",
+                    "inference": "explicit",
+                }
             ),
             lx.data.Extraction(
                 extraction_class="Triple",
-                extraction_text="John Smith has_position senior software engineer",
-                char_interval=lx.data.CharInterval(start_pos=0, end_pos=len(text1))
+                extraction_text="John Smith ... senior software engineer",
+                char_interval=lx.data.CharInterval(start_pos=0, end_pos=61),
+                attributes={
+                    "head": "John Smith",
+                    "relation": "has_position",
+                    "tail": "senior software engineer",
+                    "inference": "explicit",
+                }
             )
         ]
 
+        # Example 2: Entity classification
         text2 = "Sigma Corporation is a structured investment vehicle."
         extractions2 = [
             lx.data.Extraction(
                 extraction_class="Triple",
-                extraction_text="Sigma Corporation is_type structured investment vehicle",
-                char_interval=lx.data.CharInterval(start_pos=0, end_pos=len(text2))
+                extraction_text="Sigma Corporation is a structured investment vehicle",
+                char_interval=lx.data.CharInterval(start_pos=0, end_pos=52),
+                attributes={
+                    "head": "Sigma Corporation",
+                    "relation": "is_type",
+                    "tail": "structured investment vehicle",
+                    "inference": "explicit",
+                }
+            )
+        ]
+
+        # Example 3: Legal relationships (relevant for legal domain)
+        text3 = "Sarah Johnson from Morrison & Foerster represents the plaintiff in the case."
+        extractions3 = [
+            lx.data.Extraction(
+                extraction_class="Triple",
+                extraction_text="Sarah Johnson from Morrison & Foerster",
+                char_interval=lx.data.CharInterval(start_pos=0, end_pos=38),
+                attributes={
+                    "head": "Sarah Johnson",
+                    "relation": "works_at",
+                    "tail": "Morrison & Foerster",
+                    "inference": "explicit",
+                }
+            ),
+            lx.data.Extraction(
+                extraction_class="Triple",
+                extraction_text="Sarah Johnson ... represents the plaintiff",
+                char_interval=lx.data.CharInterval(start_pos=0, end_pos=59),
+                attributes={
+                    "head": "Sarah Johnson",
+                    "relation": "represents",
+                    "tail": "plaintiff",
+                    "inference": "explicit",
+                }
             )
         ]
 
         return [
             lx.data.ExampleData(text=text1, extractions=extractions1),
-            lx.data.ExampleData(text=text2, extractions=extractions2)
+            lx.data.ExampleData(text=text2, extractions=extractions2),
+            lx.data.ExampleData(text=text3, extractions=extractions3),
         ]
+
+    def get_examples_as_dict(self) -> list[dict[str, Any]]:
+        """Export few-shot examples in JSON-serializable format.
+
+        Returns:
+            List of example dictionaries for saving to examples.json
+        """
+        examples = self._create_examples()
+        result = []
+        for example in examples:
+            example_dict = {
+                "text": example.text,
+                "extractions": []
+            }
+            for extraction in example.extractions:
+                ext_dict = {
+                    "extraction_class": extraction.extraction_class,
+                    "extraction_text": extraction.extraction_text,
+                }
+                if extraction.char_interval:
+                    ext_dict["char_start"] = extraction.char_interval.start_pos
+                    ext_dict["char_end"] = extraction.char_interval.end_pos
+                if extraction.attributes:
+                    ext_dict["attributes"] = extraction.attributes
+                example_dict["extractions"].append(ext_dict)
+            result.append(example_dict)
+        return result
+
+    def _get_extraction_prompt_description(self) -> str:
+        """Get the prompt description for triple extraction.
+
+        Returns:
+            Detailed prompt description with Triple schema fields.
+        """
+        return """Extract knowledge graph triples (head, relation, tail) from the text.
+
+Each extraction should include these attributes:
+- head: The source entity in the relationship (person, organization, concept, etc.)
+- relation: The relationship type connecting head to tail (e.g., works_at, filed_against, is_type, represents, etc.)
+- tail: The target entity in the relationship
+- inference: Whether the triple is "explicit" (directly stated in text) or "contextual" (inferred for connectivity)
+- justification: Brief explanation for contextual triples (optional for explicit)
+
+Focus on extracting meaningful relationships between entities. Use exact entity names from the text when possible."""
+
+    def _normalize_triple(self, raw_triple: dict[str, Any]) -> dict[str, Any]:
+        """Normalize a raw extraction to standard Triple format.
+
+        Args:
+            raw_triple: Raw triple dict from langextract extraction
+
+        Returns:
+            Normalized triple with standard fields
+        """
+        return {
+            "head": raw_triple.get("head", ""),
+            "relation": raw_triple.get("relation", ""),
+            "tail": raw_triple.get("tail", ""),
+            "inference": raw_triple.get("inference", "explicit"),
+            "justification": raw_triple.get("justification"),
+            # Source grounding (from langextract)
+            "char_start": raw_triple.get("char_start"),
+            "char_end": raw_triple.get("char_end"),
+            "extraction_text": raw_triple.get("extraction_text"),
+        }
 
     def extract_from_text(
         self,
@@ -143,7 +262,9 @@ class KnowledgeGraphExtractor:
             max_tokens: Maximum tokens to generate
 
         Returns:
-            List of extracted triples as dictionaries
+            List of extracted triples as dictionaries with:
+                - head, relation, tail, inference, justification (Triple schema)
+                - char_start, char_end, extraction_text (source grounding)
         """
         # Prepare the prompt (inject text into template)
         record = {"text": text}
@@ -155,14 +276,17 @@ class KnowledgeGraphExtractor:
         examples = self._create_examples()
 
         # Extract using the client
-        triples = self.client.extract(
+        raw_triples = self.client.extract(
             text=prompt_text,
-            prompt_description="Extract knowledge graph triples from the text",
+            prompt_description=self._get_extraction_prompt_description(),
             examples=examples,
-            format_type=Triple,
+            format_type=Triple,  # Passed for compatibility, GeminiClient uses FormatType.JSON
             temperature=temperature,
             max_tokens=max_tokens
         )
+
+        # Normalize triples to standard format
+        triples = [self._normalize_triple(t) for t in raw_triples]
 
         return triples
 
@@ -264,17 +388,27 @@ class KnowledgeGraphExtractor:
             max_iterations: Maximum refinement iterations
 
         Returns:
-            Tuple of (triples, metadata) where metadata includes connectivity info
+            Tuple of (triples, metadata) where metadata includes:
+                - connectivity info
+                - bridging_triples: List of triples added during refinement
+                - Each triple has iteration_source field (0=initial, 1,2...=bridging)
         """
         import networkx as nx
 
         # Step 1: Initial extraction
         triples = self.extract_from_text(text, record_id, temperature, max_tokens)
+        
+        # Mark initial triples with iteration_source = 0
+        for triple in triples:
+            triple["iteration_source"] = 0
 
         # Build graph and analyze connectivity
         G = self._build_graph_from_triples(triples)
         components = list(nx.weakly_connected_components(G))
         num_components = len(components)
+
+        # Track all bridging triples for separate output
+        all_bridging_triples: list[dict[str, Any]] = []
 
         metadata = {
             "initial_extraction": {
@@ -283,7 +417,8 @@ class KnowledgeGraphExtractor:
                 "edges": G.number_of_edges(),
                 "disconnected_components": num_components,
             },
-            "refinement_iterations": []
+            "refinement_iterations": [],
+            "bridging_triples": [],  # Will be populated with all bridging triples
         }
 
         # Step 2: Iterative refinement if needed
@@ -292,8 +427,19 @@ class KnowledgeGraphExtractor:
             # Format component information for the prompt
             component_info = self._format_components(components, G)
 
-            # Create bridging prompt
-            bridging_prompt = f"""
+            # Create bridging prompt (use template if available, otherwise hardcoded)
+            if self.bridging_prompt_template:
+                # Use custom template with variable substitution
+                bridging_prompt = self.bridging_prompt_template.replace(
+                    "{num_components}", str(num_components)
+                ).replace(
+                    "{component_info}", component_info
+                ).replace(
+                    "{text}", text
+                )
+            else:
+                # Use hardcoded default prompt
+                bridging_prompt = f"""
 The previously extracted knowledge graph has {num_components} disconnected components.
 
 Disconnected Components:
@@ -313,15 +459,18 @@ Extract ONLY the bridging triples needed to connect components.
 Do not re-extract existing triples.
 """
 
-            # Extract bridging triples
-            bridging_triples = self.client.extract(
+            # Extract bridging triples using unconstrained generation
+            # (bypasses langextract source grounding to allow for better inference)
+            bridging_triples = self.client.generate_json(
                 text=bridging_prompt,
-                prompt_description="Extract bridging triples to connect graph components",
-                examples=self._create_examples(),
+                prompt_description="Extract bridging triples to connect graph components. Infer relations if necessary.",
                 format_type=Triple,
                 temperature=temperature,
                 max_tokens=max_tokens
             )
+
+            # Normalize bridging triples
+            bridging_triples = [self._normalize_triple(t) for t in bridging_triples]
 
             # Filter out duplicates
             existing_triples_set = {
@@ -333,30 +482,72 @@ Do not re-extract existing triples.
                 if (t['head'], t['relation'], t['tail']) not in existing_triples_set
             ]
 
-            # Add to triples and rebuild graph
+            # Mark new triples with iteration_source
+            current_iteration = iteration + 1
+            for triple in new_triples:
+                triple["iteration_source"] = current_iteration
+
+            # Early stopping: if no new triples found, LLM cannot find more connections
+            if len(new_triples) == 0:
+                metadata["refinement_iterations"].append({
+                    "iteration": current_iteration,
+                    "new_triples": 0,
+                    "total_triples": len(triples),
+                    "disconnected_components": num_components,
+                    "early_stop_reason": "no_new_triples_found"
+                })
+                break
+
+            # Add to triples and track bridging triples separately
             triples.extend(new_triples)
+            all_bridging_triples.extend(new_triples)
+            
             G = self._build_graph_from_triples(triples)
             components = list(nx.weakly_connected_components(G))
+
+            # Early stopping: if components didn't decrease, no progress made
+            prev_num_components = num_components
             num_components = len(components)
 
             # Record iteration metadata
             metadata["refinement_iterations"].append({
-                "iteration": iteration + 1,
+                "iteration": current_iteration,
                 "new_triples": len(new_triples),
                 "total_triples": len(triples),
                 "disconnected_components": num_components,
             })
 
+            # Early stopping: if no improvement in connectivity
+            if num_components >= prev_num_components:
+                metadata["refinement_iterations"][-1]["early_stop_reason"] = "no_connectivity_improvement"
+                break
+
             iteration += 1
+
+        # Determine stopping reason
+        stop_reason = None
+        if num_components <= max_disconnected:
+            stop_reason = "connectivity_goal_achieved"
+        elif iteration >= max_iterations:
+            stop_reason = "max_iterations_reached"
+        elif metadata["refinement_iterations"] and "early_stop_reason" in metadata["refinement_iterations"][-1]:
+            stop_reason = metadata["refinement_iterations"][-1]["early_stop_reason"]
+
+        # Store bridging triples in metadata
+        metadata["bridging_triples"] = all_bridging_triples
 
         # Final metadata
         metadata["final_state"] = {
             "total_triples": len(triples),
+            "initial_triples": metadata["initial_extraction"]["triples"],
+            "bridging_triples": len(all_bridging_triples),
             "nodes": G.number_of_nodes(),
             "edges": G.number_of_edges(),
             "disconnected_components": num_components,
             "is_connected": num_components == 1,
             "iterations_used": iteration,
+            "stop_reason": stop_reason,
+            "connectivity_improvement": metadata["initial_extraction"]["disconnected_components"] - num_components,
         }
 
         return triples, metadata
@@ -381,10 +572,11 @@ Do not re-extract existing triples.
     ) -> str:
         """Format disconnected components for prompt."""
         component_strs = []
-        for i, component in enumerate(components[:10], 1):  # Limit to 10 components
-            nodes = list(component)[:5]  # Limit to 5 nodes per component
+        # Increase visibility to the model: more components and more nodes per component
+        for i, component in enumerate(components[:30], 1):  # Show up to 30 components
+            nodes = list(component)[:10]  # Show up to 10 nodes per component
             node_str = ", ".join(nodes)
-            if len(component) > 5:
+            if len(component) > 10:
                 node_str += f" ... ({len(component)} total nodes)"
             component_strs.append(f"Component {i}: {node_str}")
 

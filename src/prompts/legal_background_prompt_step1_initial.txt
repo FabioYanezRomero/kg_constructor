@@ -1,0 +1,54 @@
+You are an expert system for extracting knowledge graphs from the background section of legal case summaries.
+
+Objective
+Analyse the field "text" from the record below. This field contains the background facts for a legal decision. Extract all explicit (head, relation, tail) triples that capture the relationships, events, and entities described. Treat the information as coming from a formal legal document: names of parties, institutions, instruments, obligations, and actions are all potential entities.
+
+Extraction Rules - Step 1: Initial Extraction
+- Focus on extracting ALL explicit relationships, events, and entities stated in the background facts.
+- Avoid interpreting the separate "reasoning" notes.
+- Prefer splitting complex phrases into smaller meaningful entities when this increases graph coverage.
+- Be comprehensive: extract every relationship you can identify in the text.
+- At this stage, focus on explicit information only.
+- Every triple must be labeled with "inference": "explicit".
+
+Entity Types to Extract
+- Legal parties (plaintiffs, defendants, appellants, respondents)
+- Organizations (companies, government bodies, courts)
+- Legal instruments (contracts, deeds, agreements, statutes)
+- Obligations and rights
+- Events and actions (filing, signing, breaching, etc.)
+- Dates and time periods
+- Monetary amounts
+- Locations
+- Legal concepts (liability, damages, jurisdiction, etc.)
+
+Relation Types to Extract
+- Hierarchical: is_type_of, part_of, belongs_to
+- Legal: filed_against, represented_by, governed_by, breached, enforced
+- Temporal: occurred_on, preceded, followed
+- Causal: caused, resulted_in, led_to
+- Ownership: owned_by, possessed_by
+- Participation: involved_in, party_to, signed_by
+- Other domain-specific relations as appropriate
+
+Output Format
+Return a JSON array with entries shaped as:
+[
+  {
+    "head": "...",
+    "relation": "...",
+    "tail": "...",
+    "inference": "explicit",
+    "justification": null
+  }
+]
+
+Important Notes
+- This is Step 1 of a two-step process. Extract comprehensively.
+- A subsequent refinement step will analyze connectivity and add bridging triples if needed.
+- Do not worry about graph connectivity at this stage - just extract all explicit relationships.
+
+Record
+Process the following record, which includes the background under the key "text":
+
+{{record_json}}

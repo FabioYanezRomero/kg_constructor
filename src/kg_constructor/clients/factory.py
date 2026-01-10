@@ -25,12 +25,15 @@ class ClientConfig:
     client_type: ClientType = "gemini"
 
     # Common parameters (all clients)
-    model_id: str = "gemini-2.0-flash-exp"
+    model_id: str = "gemini-2.0-flash"
     temperature: float = 0.0
     max_workers: int = 10
-    batch_length: int = 10
     max_char_buffer: int = 8000
     show_progress: bool = True
+
+    # Langextract-specific parameters
+    extraction_passes: int = 1  # Number of extraction passes (higher = better recall)
+    batch_length: int = 10  # For Ollama/LMStudio clients
 
     # API-based clients (Gemini)
     api_key: str | None = None
@@ -105,9 +108,10 @@ def create_client(config: ClientConfig) -> BaseLLMClient:
             model_id=config.model_id,
             api_key=config.api_key,
             max_workers=config.max_workers,
-            batch_length=config.batch_length,
             max_char_buffer=config.max_char_buffer,
-            show_progress=config.show_progress
+            extraction_passes=config.extraction_passes,
+            show_progress=config.show_progress,
+            temperature=config.temperature,
         )
 
     elif config.client_type == "ollama":

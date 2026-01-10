@@ -26,6 +26,7 @@ class ExtractionPipeline:
         client: BaseLLMClient | None = None,
         client_config: ClientConfig | None = None,
         prompt_path: Path | str | None = None,
+        bridging_prompt_path: Path | str | None = None,
         enable_entity_viz: bool = True
     ) -> None:
         """Initialize the pipeline.
@@ -34,7 +35,8 @@ class ExtractionPipeline:
             output_dir: Directory to save all outputs
             client: Pre-configured LLM client (takes precedence)
             client_config: Configuration for creating a client
-            prompt_path: Path to prompt template file
+            prompt_path: Path to prompt template file for initial extraction
+            bridging_prompt_path: Path to prompt template for bridging/refinement (optional)
             enable_entity_viz: Whether to create entity highlighting visualizations
         """
         self.output_dir = Path(output_dir)
@@ -44,7 +46,8 @@ class ExtractionPipeline:
         self.extractor = KnowledgeGraphExtractor(
             client=client,
             client_config=client_config,
-            prompt_path=prompt_path
+            prompt_path=prompt_path,
+            bridging_prompt_path=bridging_prompt_path
         )
 
         # Initialize entity visualizer

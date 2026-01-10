@@ -18,16 +18,22 @@
 
 # Model Configuration
 MODEL_PROVIDER="gemini"  # Options: gemini, ollama, lmstudio
-MODEL_NAME="gemini-2.0-flash-exp"  # For gemini: gemini-2.0-flash-exp, gemini-1.5-pro, etc.
+MODEL_NAME="gemini-2.0-flash"  # For gemini: gemini-2.0-flash, gemini-2.5-flash, etc.
 TEMPERATURE=0.0
+
+# LangExtract Configuration (NEW - leverages full langextract features)
+EXTRACTION_PASSES=1      # Multiple passes for higher recall (1-3 recommended)
+MAX_WORKERS=10           # Parallel processing workers for long documents
+MAX_CHAR_BUFFER=8000     # Maximum characters per chunk for long documents
 
 # Input Data
 INPUT_JSON="/app/data/legal/processed/legal_background.jsonl"  # Path to your JSON file
 RECORD_ID="UKSC-2009-0143"  # The ID/key of the specific record to process
 TEXT_FIELD="text"  # Field name containing the text to analyze
 
-# Prompt Configuration
-PROMPT_FILE="/app/src/prompts/legal_background_prompt.txt"  # Path to custom prompt (optional, leave empty for default)
+# Prompt Configuration (Two-Step Extraction)
+PROMPT_FILE_STEP1="/app/src/prompts/legal_background_prompt_step1_initial.txt"  # Initial extraction prompt
+PROMPT_FILE_STEP2="/app/src/prompts/legal_background_prompt_step2_bridging.txt"  # Bridging/refinement prompt
 
 # Output Configuration
 OUTPUT_DIR="/app/test_outputs/single_extraction_$(date +%Y%m%d_%H%M%S)"
@@ -37,10 +43,9 @@ CREATE_ENTITY_VIZ=true  # Create langextract HTML visualization
 CREATE_GRAPH_VIZ=true   # Create NetworkX/Plotly graph visualization
 ENTITY_GROUP_BY="entity_type"  # Options: entity_type, relation
 
-# Connectivity Configuration (Iterative Approach - DEFAULT)
-USE_ITERATIVE_EXTRACTION=true  # Use iterative connectivity-aware extraction (recommended)
-MAX_DISCONNECTED=3  # Maximum acceptable disconnected components (if using iterative)
-MAX_ITERATIONS=2    # Maximum refinement iterations (if using iterative)
+# Connectivity Configuration (Two-Step Extraction)
+MAX_DISCONNECTED=1  # Maximum acceptable disconnected components
+MAX_ITERATIONS=5    # Max refinement iterations (increased to 5 to push for full connectivity)
 
 ################################################################################
 # Script Execution - Do not modify below this line
@@ -87,6 +92,7 @@ fi
 
 echo "================================================================================"
 echo "KNOWLEDGE GRAPH EXTRACTION - SINGLE TEXT TEST"
+echo "Using LangExtract for: Source Grounding, Few-shot Learning, Long Doc Optimization"
 echo "================================================================================"
 echo "Model Provider: $MODEL_PROVIDER"
 echo "Model Name: $MODEL_NAME"
@@ -94,6 +100,15 @@ echo "Input JSON: $INPUT_JSON"
 echo "Record ID: $RECORD_ID"
 echo "Text Field: $TEXT_FIELD"
 echo "Output Directory: $OUTPUT_DIR"
+echo ""
+echo "LangExtract Configuration:"
+echo "  • Extraction passes: $EXTRACTION_PASSES"
+echo "  • Max workers: $MAX_WORKERS"
+echo "  • Max char buffer: $MAX_CHAR_BUFFER"
+echo ""
+echo "Extraction Method: Two-Step Connectivity-Aware"
+echo "  • Max disconnected: $MAX_DISCONNECTED"
+echo "  • Max iterations: $MAX_ITERATIONS"
 if [ "$MODEL_PROVIDER" = "gemini" ]; then
     if [ -n "$LANGEXTRACT_API_KEY" ] || [ -n "$GOOGLE_API_KEY" ]; then
         echo "API Key: ✓ Configured"
@@ -102,14 +117,21 @@ fi
 echo "================================================================================"
 
 # Create output directory structure
-mkdir -p "$OUTPUT_DIR"/{json,graphml,entity_viz,graph_viz}
+mkdir -p "$OUTPUT_DIR"/{json,graphml,metadata,entity_viz,graph_viz}
 
 # Create a temporary Python script for extraction
 PYTHON_SCRIPT="$OUTPUT_DIR/extract_single.py"
 
 cat > "$PYTHON_SCRIPT" << 'PYTHON_EOF'
 #!/usr/bin/env python3
-"""Single text extraction script."""
+"""Single text extraction script using full LangExtract integration.
+
+This script leverages all langextract features:
+- Source Grounding: Character-level positions for each extraction
+- Few-shot Examples: Schema enforcement via examples
+- Long Document Optimization: Chunking and parallel processing
+- Controlled Generation: Native JSON schema constraints
+"""
 
 import json
 import sys
@@ -128,14 +150,17 @@ def main():
     input_json = sys.argv[4]
     record_id = sys.argv[5]
     text_field = sys.argv[6]
-    prompt_file = sys.argv[7] if sys.argv[7] else None
-    output_dir = Path(sys.argv[8])
-    create_entity_viz = sys.argv[9].lower() == 'true'
-    create_graph_viz = sys.argv[10].lower() == 'true'
-    entity_group_by = sys.argv[11]
-    use_iterative = sys.argv[12].lower() == 'true'
-    max_disconnected = int(sys.argv[13])
-    max_iterations = int(sys.argv[14])
+    output_dir = Path(sys.argv[7])
+    create_entity_viz = sys.argv[8].lower() == 'true'
+    create_graph_viz = sys.argv[9].lower() == 'true'
+    entity_group_by = sys.argv[10]
+    max_disconnected = int(sys.argv[11])
+    max_iterations = int(sys.argv[12])
+    prompt_file_step1 = sys.argv[13] if sys.argv[13] else None
+    prompt_file_step2 = sys.argv[14] if sys.argv[14] else None
+    extraction_passes = int(sys.argv[15])
+    max_workers = int(sys.argv[16])
+    max_char_buffer = int(sys.argv[17])
 
     print(f"\n{'='*80}")
     print("STEP 1: LOADING INPUT DATA")
@@ -208,56 +233,143 @@ def main():
     print(f"{text[:200]}...")
 
     print(f"\n{'='*80}")
-    print("STEP 2: INITIALIZING EXTRACTION PIPELINE")
+    print("STEP 2: INITIALIZING EXTRACTION PIPELINE (WITH LANGEXTRACT)")
     print(f"{'='*80}")
 
-    # Configure client
+    # Configure client with langextract parameters
     config = ClientConfig(
         client_type=model_provider,
-        model_id=model_name  # Note: uses 'model_id' not 'model_name'
+        model_id=model_name,
+        temperature=temperature,
+        extraction_passes=extraction_passes,
+        max_workers=max_workers,
+        max_char_buffer=max_char_buffer,
+        show_progress=True,
     )
+
+    # Two-step extraction prompts
+    initial_prompt = prompt_file_step1 if prompt_file_step1 else None
+    bridging_prompt = prompt_file_step2 if prompt_file_step2 else None
+    print(f"Using two-step extraction prompts:")
+    print(f"  • Step 1 (initial): {initial_prompt or 'default'}")
+    print(f"  • Step 2 (bridging): {bridging_prompt or 'hardcoded default'}")
 
     # Initialize pipeline
     pipeline = ExtractionPipeline(
         output_dir=output_dir,
         client_config=config,
-        prompt_path=prompt_file if prompt_file else None,
+        prompt_path=initial_prompt,
+        bridging_prompt_path=bridging_prompt,
         enable_entity_viz=create_entity_viz
     )
 
     print(f"✓ Client: {pipeline.extractor.client.__class__.__name__}")
     print(f"✓ Model: {pipeline.extractor.get_model_name()}")
     print(f"✓ Temperature: {temperature}")
+    print(f"\nLangExtract Features Enabled:")
+    print(f"  ✓ Source Grounding (char_start, char_end for each triple)")
+    print(f"  ✓ Few-shot Examples (guiding extraction quality)")
+    print(f"  ✓ Controlled Generation (JSON schema constraints)")
+    print(f"  ✓ Long Document Optimization (passes={extraction_passes}, workers={max_workers})")
 
     print(f"\n{'='*80}")
     print("STEP 3: EXTRACTING TRIPLES WITH LANGEXTRACT")
     print(f"{'='*80}")
 
-    # Extract triples
-    triples = pipeline.extractor.extract_from_text(
+    # Two-step extraction with connectivity awareness
+    print(f"Using Two-Step Connectivity-Aware Extraction")
+    print(f"  • Max disconnected components: {max_disconnected}")
+    print(f"  • Max iterations: {max_iterations}\n")
+
+    triples, metadata = pipeline.extractor.extract_connected_graph(
         text=text,
         record_id=record_id,
-        temperature=temperature
+        temperature=temperature,
+        max_disconnected=max_disconnected,
+        max_iterations=max_iterations
     )
 
-    print(f"✓ Extracted {len(triples)} triples")
+    # Show extraction progress
+    print(f"\nInitial extraction:")
+    print(f"  • Triples: {metadata['initial_extraction']['triples']}")
+    print(f"  • Components: {metadata['initial_extraction']['disconnected_components']}")
 
-    # Save JSON
+    if metadata['refinement_iterations']:
+        print(f"\nRefinement iterations:")
+        for it in metadata['refinement_iterations']:
+            print(f"  Iteration {it['iteration']}: +{it['new_triples']} triples, {it['disconnected_components']} components")
+
+    print(f"\nFinal results:")
+    print(f"  • Total triples: {metadata['final_state']['total_triples']}")
+    print(f"  • Disconnected components: {metadata['final_state']['disconnected_components']}")
+    print(f"  • Is connected: {metadata['final_state']['is_connected']}")
+    print(f"  • Total API calls: {1 + metadata['final_state']['iterations_used']}")
+
+    print(f"\n✓ Extracted {len(triples)} triples")
+
+    # Show source grounding and iteration tracking statistics
+    print(f"\n{'='*80}")
+    print("TRACEABILITY ANALYSIS (LangExtract Features)")
+    print(f"{'='*80}")
+    
+    source_grounded = sum(1 for t in triples if t.get("char_start") is not None)
+    print(f"Source grounded triples: {source_grounded}/{len(triples)} ({100*source_grounded/len(triples):.1f}%)")
+    
+    # Iteration tracking stats
+    initial_count = sum(1 for t in triples if t.get("iteration_source") == 0)
+    bridging_count = sum(1 for t in triples if t.get("iteration_source", 0) > 0)
+    print(f"Initial extraction triples: {initial_count}")
+    print(f"Bridging triples (iterations 1+): {bridging_count}")
+    
+    print(f"\nSample triples with traceability:")
+    for i, triple in enumerate(triples[:5], 1):
+        head = triple.get('head', 'N/A')
+        relation = triple.get('relation', 'N/A')
+        tail = triple.get('tail', 'N/A')
+        char_start = triple.get('char_start')
+        char_end = triple.get('char_end')
+        iteration_source = triple.get('iteration_source', 'N/A')
+        extraction_text = triple.get('extraction_text', '')
+        
+        iter_label = "initial" if iteration_source == 0 else f"bridging-{iteration_source}"
+        print(f"\n  {i}. [{iter_label}] {head} → [{relation}] → {tail}")
+        if char_start is not None and char_end is not None:
+            print(f"     ✓ Source: chars {char_start}-{char_end}")
+            if extraction_text:
+                # Show the extracted text span (truncated)
+                span = extraction_text[:60] + "..." if len(extraction_text) > 60 else extraction_text
+                print(f"     ✓ Text: \"{span}\"")
+        else:
+            print(f"     ✗ No source grounding")
+    
+    if len(triples) > 5:
+        print(f"\n  ... and {len(triples) - 5} more triples")
+
+    # Save JSON files with traceability
+    print(f"\n{'='*80}")
+    print("SAVING TRACEABILITY FILES")
+    print(f"{'='*80}")
+    
+    # 1. All triples (with iteration_source)
     json_path = output_dir / "json" / f"{record_id}.json"
     json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(triples, f, ensure_ascii=False, indent=2)
-
-    print(f"✓ Saved triples to: {json_path}")
-
-    # Print sample triples
-    print(f"\nSample triples (first 3):")
-    for i, triple in enumerate(triples[:3], 1):
-        print(f"  {i}. {triple.get('head', 'N/A')} → [{triple.get('relation', 'N/A')}] → {triple.get('tail', 'N/A')}")
-        print(f"     Inference: {triple.get('inference', 'N/A')}")
-
-    if len(triples) > 3:
-        print(f"  ... and {len(triples) - 3} more")
+    print(f"✓ Saved all triples: {json_path}")
+    
+    # 2. Bridging triples only
+    bridging_triples = metadata.get("bridging_triples", [])
+    bridging_path = output_dir / "json" / f"{record_id}_bridging.json"
+    with open(bridging_path, 'w', encoding='utf-8') as f:
+        json.dump(bridging_triples, f, ensure_ascii=False, indent=2)
+    print(f"✓ Saved bridging triples: {bridging_path} ({len(bridging_triples)} triples)")
+    
+    # 3. Few-shot examples used
+    examples = pipeline.extractor.get_examples_as_dict()
+    examples_path = output_dir / "json" / f"{record_id}_examples.json"
+    with open(examples_path, 'w', encoding='utf-8') as f:
+        json.dump(examples, f, ensure_ascii=False, indent=2)
+    print(f"✓ Saved few-shot examples: {examples_path} ({len(examples)} examples)")
 
     print(f"\n{'='*80}")
     print("STEP 4: CONVERTING TO GRAPHML")
@@ -314,15 +426,29 @@ def main():
 
     total_entities = len(all_entities)
 
-    # Build metadata
-    metadata = {
+    # Build metadata (preserve iterative extraction metadata if available)
+    output_metadata = {
         "extraction_info": {
             "record_id": record_id,
             "timestamp": datetime.now().isoformat(),
             "model_provider": model_provider,
             "model_name": model_name,
             "temperature": temperature,
-            "prompt_file": str(prompt_file) if prompt_file else "default",
+            "prompt_step1": str(prompt_file_step1) if prompt_file_step1 else "default",
+            "prompt_step2": str(prompt_file_step2) if prompt_file_step2 else "hardcoded",
+            "extraction_method": "two_step_connectivity_aware",
+        },
+        "langextract_config": {
+            "extraction_passes": extraction_passes,
+            "max_workers": max_workers,
+            "max_char_buffer": max_char_buffer,
+            "features_enabled": [
+                "source_grounding",
+                "few_shot_examples",
+                "controlled_generation",
+                "long_document_optimization",
+            ],
+            "merge_strategy": "first_pass_wins (non-overlapping)",
         },
         "input_data": {
             "source_file": input_json,
@@ -332,10 +458,14 @@ def main():
         },
         "extraction_results": {
             "total_triples": len(triples),
+            "initial_triples": initial_count,
+            "bridging_triples": bridging_count,
             "explicit_triples": explicit_count,
             "contextual_triples": contextual_count,
             "explicit_percentage": round(100 * explicit_count / len(triples), 2) if triples else 0,
             "contextual_percentage": round(100 * contextual_count / len(triples), 2) if triples else 0,
+            "source_grounded_triples": source_grounded,
+            "source_grounded_percentage": round(100 * source_grounded / len(triples), 2) if triples else 0,
         },
         "graph_structure": {
             "total_nodes": num_nodes,
@@ -360,21 +490,33 @@ def main():
     # Count relation frequencies
     from collections import Counter
     relation_counts = Counter(t.get('relation', '') for t in triples)
-    metadata["relation_analysis"]["most_common_relations"] = dict(relation_counts.most_common(10))
+    output_metadata["relation_analysis"]["most_common_relations"] = dict(relation_counts.most_common(10))
+
+    # Add iterative extraction metadata if available
+    if metadata:
+        output_metadata["iterative_extraction"] = {
+            "max_disconnected": max_disconnected,
+            "max_iterations": max_iterations,
+            "initial_extraction": metadata["initial_extraction"],
+            "refinement_iterations": metadata["refinement_iterations"],
+            "final_state": metadata["final_state"],
+            "total_api_calls": 1 + metadata["final_state"]["iterations_used"]
+        }
 
     # Save metadata
     metadata_path = output_dir / "metadata" / f"{record_id}_metadata.json"
     metadata_path.parent.mkdir(parents=True, exist_ok=True)
     with open(metadata_path, 'w', encoding='utf-8') as f:
-        json.dump(metadata, f, ensure_ascii=False, indent=2)
+        json.dump(output_metadata, f, ensure_ascii=False, indent=2)
 
     print(f"✓ Generated metadata: {metadata_path}")
     print(f"\nKey Analytics:")
     print(f"  • Total triples: {len(triples)} ({explicit_count} explicit, {contextual_count} contextual)")
+    print(f"  • Source grounded: {source_grounded}/{len(triples)} ({output_metadata['extraction_results']['source_grounded_percentage']}%)")
     print(f"  • Unique entities: {total_entities} ({entities_in_text} in text, {entities_inferred} inferred)")
     print(f"  • Graph nodes: {num_nodes}, edges: {num_edges}")
     print(f"  • Connected components: {num_components}")
-    print(f"  • Average degree: {metadata['graph_structure']['avg_degree']}")
+    print(f"  • Average degree: {output_metadata['graph_structure']['avg_degree']}")
 
     # Create visualizations
     if create_entity_viz and pipeline.entity_visualizer:
@@ -413,12 +555,19 @@ def main():
     print(f"Output directory: {output_dir}")
     print(f"\nGenerated files:")
     print(f"  - JSON triples: {output_dir / 'json' / f'{record_id}.json'}")
+    print(f"  - Bridging triples: {output_dir / 'json' / f'{record_id}_bridging.json'}")
+    print(f"  - Few-shot examples: {output_dir / 'json' / f'{record_id}_examples.json'}")
     print(f"  - GraphML: {output_dir / 'graphml' / f'{record_id}.graphml'}")
     print(f"  - Metadata: {output_dir / 'metadata' / f'{record_id}_metadata.json'}")
     if create_entity_viz:
         print(f"  - Entity HTML: {output_dir / 'entity_viz' / f'{record_id}.html'}")
     if create_graph_viz:
         print(f"  - Graph HTML: {output_dir / 'graph_viz' / f'{record_id}.html'}")
+    print(f"\nTraceability Summary:")
+    print(f"  ✓ Source Grounding: {source_grounded}/{len(triples)} triples with char positions")
+    print(f"  ✓ Iteration Tracking: {initial_count} initial + {bridging_count} bridging triples")
+    print(f"  ✓ Few-shot Examples: {len(examples)} examples saved")
+    print(f"  ✓ Long Doc Optimization: passes={extraction_passes}, workers={max_workers}")
     print(f"{'='*80}")
 
 if __name__ == "__main__":
@@ -431,7 +580,7 @@ chmod +x "$PYTHON_SCRIPT"
 
 # Run the extraction
 echo ""
-echo "Running extraction pipeline..."
+echo "Running extraction pipeline with LangExtract..."
 echo ""
 
 python3 "$PYTHON_SCRIPT" \
@@ -441,11 +590,17 @@ python3 "$PYTHON_SCRIPT" \
     "$INPUT_JSON" \
     "$RECORD_ID" \
     "$TEXT_FIELD" \
-    "$PROMPT_FILE" \
     "$OUTPUT_DIR" \
     "$CREATE_ENTITY_VIZ" \
     "$CREATE_GRAPH_VIZ" \
-    "$ENTITY_GROUP_BY"
+    "$ENTITY_GROUP_BY" \
+    "$MAX_DISCONNECTED" \
+    "$MAX_ITERATIONS" \
+    "$PROMPT_FILE_STEP1" \
+    "$PROMPT_FILE_STEP2" \
+    "$EXTRACTION_PASSES" \
+    "$MAX_WORKERS" \
+    "$MAX_CHAR_BUFFER"
 
 EXTRACTION_EXIT_CODE=$?
 

@@ -126,13 +126,41 @@ The script supports three JSON formats:
 
 ### Prompt Configuration
 
+**For simple one-step extraction** (`USE_ITERATIVE_EXTRACTION=false`):
 ```bash
-# Path to custom prompt file (optional)
-PROMPT_FILE="/app/prompts/extraction_prompt.txt"
-
-# Leave empty to use default prompt
-PROMPT_FILE=""
+# Single prompt for all extraction
+PROMPT_FILE="/app/src/prompts/legal_background_prompt.txt"
 ```
+
+**For iterative two-step extraction** (`USE_ITERATIVE_EXTRACTION=true`):
+```bash
+# Step 1: Initial extraction prompt
+PROMPT_FILE_STEP1="/app/src/prompts/legal_background_prompt_step1_initial.txt"
+
+# Step 2: Bridging/refinement prompt
+PROMPT_FILE_STEP2="/app/src/prompts/legal_background_prompt_step2_bridging.txt"
+```
+
+**Available prompt templates**:
+- `legal_background_prompt.txt` - Original all-in-one prompt (for simple extraction)
+- `legal_background_prompt_step1_initial.txt` - Step 1: Comprehensive initial extraction
+- `legal_background_prompt_step2_bridging.txt` - Step 2: Connectivity-focused bridging
+
+**To use custom prompts**:
+```bash
+# Create your own prompts
+nano /app/prompts/my_custom_initial.txt
+nano /app/prompts/my_custom_bridging.txt
+
+# Configure the script
+PROMPT_FILE_STEP1="/app/prompts/my_custom_initial.txt"
+PROMPT_FILE_STEP2="/app/prompts/my_custom_bridging.txt"
+```
+
+**Bridging prompt template variables**:
+- `{num_components}` - Number of disconnected components
+- `{component_info}` - Formatted list of component entities
+- `{text}` - Original input text
 
 ### Output Configuration
 
@@ -157,6 +185,37 @@ CREATE_GRAPH_VIZ=true
 ENTITY_GROUP_BY="entity_type"  # Options: entity_type, relation
 ```
 
+### Connectivity Configuration (Iterative Approach - DEFAULT)
+
+```bash
+# Use iterative connectivity-aware extraction (recommended, DEFAULT)
+USE_ITERATIVE_EXTRACTION=true
+
+# Maximum acceptable disconnected components (if using iterative)
+MAX_DISCONNECTED=3
+
+# Maximum refinement iterations (if using iterative)
+MAX_ITERATIONS=2
+```
+
+**What is Iterative Connectivity-Aware Extraction?**
+
+By default, the script now uses a **two-phase iterative extraction approach** that produces more connected knowledge graphs:
+
+1. **Phase 1: Initial Extraction** - Extracts explicit and contextual triples from the text
+2. **Phase 2: Connectivity Refinement** - If the graph has too many disconnected components, the LLM iteratively adds bridging triples to improve connectivity
+
+This approach:
+- ✅ Produces graphs with fewer disconnected components
+- ✅ Finds implicit relationships that connect entities
+- ✅ Maintains semantic validity (no hallucinations)
+- ⚠️ Uses 1-3 API calls instead of 1 (slightly higher cost)
+
+**To disable iterative extraction** and use simple one-step extraction:
+```bash
+USE_ITERATIVE_EXTRACTION=false
+```
+
 ## What the Script Does
 
 The script runs these steps automatically:
@@ -173,9 +232,41 @@ The script runs these steps automatically:
 - Loads the prompt template (if specified)
 
 ### Step 3: Extracting Triples with LangExtract
-- Sends the text to the LLM
+
+**Default: Iterative Connectivity-Aware Extraction**
+
+When `USE_ITERATIVE_EXTRACTION=true` (default):
+
+1. **Initial Extraction**: Sends text to LLM to extract explicit and contextual triples
+2. **Connectivity Analysis**: Builds graph and counts disconnected components
+3. **Iterative Refinement** (if needed): If components > `MAX_DISCONNECTED`, iteratively extracts bridging triples to improve connectivity
+4. **Output**: Final connected graph with metadata about refinement process
+
+Shows progress during extraction:
+```
+Initial extraction:
+  • Triples: 34
+  • Components: 11
+
+Refinement iterations:
+  Iteration 1: +6 triples, 6 components
+  Iteration 2: +7 triples, 1 components
+
+Final results:
+  • Total triples: 47
+  • Disconnected components: 1
+  • Is connected: True
+  • Total API calls: 3
+```
+
+**Alternative: Simple One-Step Extraction**
+
+When `USE_ITERATIVE_EXTRACTION=false`:
+- Sends the text to the LLM once
 - Parses the response into structured triples
-- Saves triples as JSON: `{output_dir}/json/{record_id}.json`
+- Uses 1 API call
+
+**Output**: Saves triples as JSON: `{output_dir}/json/{record_id}.json`
 
 **Triple Format:**
 ```json
@@ -201,12 +292,13 @@ The script runs these steps automatically:
 - Saves metadata as JSON: `{output_dir}/metadata/{record_id}_metadata.json`
 
 **Metadata includes:**
-- **Extraction info**: Model used, temperature, timestamp, prompt file
+- **Extraction info**: Model used, temperature, timestamp, prompt file, extraction method (iterative vs simple)
 - **Input data**: Source file, text length (chars & words)
 - **Extraction results**: Total triples, explicit vs contextual counts and percentages
 - **Graph structure**: Number of nodes, edges, disconnected components, connectivity status, average degree
 - **Entity analysis**: Total unique entities, entities found in text vs inferred, percentages
 - **Relation analysis**: Unique relations count, most common relations with frequencies
+- **Iterative extraction** (if enabled): Initial extraction stats, refinement iterations, final state, total API calls
 
 **Example analytics output:**
 ```
@@ -321,7 +413,29 @@ This colors entities based on their relationship roles:
 - "filed_lawsuit (source)" - red
 - etc.
 
-### Example 5: Only Graph Visualization
+### Example 5: Compare Iterative vs Simple Extraction
+
+Test the same text with both approaches to see the connectivity improvement:
+
+```bash
+# Test 1: Iterative (default)
+USE_ITERATIVE_EXTRACTION=true
+MAX_DISCONNECTED=3
+MAX_ITERATIONS=2
+OUTPUT_DIR="/app/test_outputs/iterative_test"
+./test_single_extraction.sh
+
+# Test 2: Simple one-step
+USE_ITERATIVE_EXTRACTION=false
+OUTPUT_DIR="/app/test_outputs/simple_test"
+./test_single_extraction.sh
+
+# Compare the metadata files to see connectivity improvement
+cat /app/test_outputs/iterative_test/metadata/*_metadata.json | jq '.graph_structure'
+cat /app/test_outputs/simple_test/metadata/*_metadata.json | jq '.graph_structure'
+```
+
+### Example 6: Only Graph Visualization
 
 If you only want the network graph (no entity highlighting):
 ```bash
@@ -329,7 +443,7 @@ CREATE_ENTITY_VIZ=false
 CREATE_GRAPH_VIZ=true
 ```
 
-### Example 6: Compare Different Models
+### Example 7: Compare Different Models
 
 Run multiple times with different models:
 
@@ -371,23 +485,51 @@ cat test_outputs/single_extraction_*/metadata/record_001_metadata.json
 5. **Entity Analysis**: How many entities appear in text vs inferred
 6. **Relation Analysis**: Most common relationship types
 
-**Example metadata:**
+**Example metadata (with iterative extraction):**
 ```json
 {
   "extraction_info": {
     "model_name": "gemini-2.0-flash-exp",
-    "temperature": 0.0
+    "temperature": 0.0,
+    "extraction_method": "iterative_connectivity_aware"
   },
   "graph_structure": {
-    "total_nodes": 27,
-    "total_edges": 21,
-    "disconnected_components": 6,
-    "is_connected": false,
-    "avg_degree": 1.56
+    "total_nodes": 38,
+    "total_edges": 47,
+    "disconnected_components": 1,
+    "is_connected": true,
+    "avg_degree": 2.47
   },
   "entity_analysis": {
-    "entities_in_text_percentage": 78.57,
-    "entities_inferred_percentage": 21.43
+    "entities_in_text_percentage": 81.58,
+    "entities_inferred_percentage": 18.42
+  },
+  "iterative_extraction": {
+    "max_disconnected": 3,
+    "max_iterations": 2,
+    "initial_extraction": {
+      "triples": 34,
+      "disconnected_components": 11
+    },
+    "refinement_iterations": [
+      {
+        "iteration": 1,
+        "new_triples": 6,
+        "disconnected_components": 6
+      },
+      {
+        "iteration": 2,
+        "new_triples": 7,
+        "disconnected_components": 1
+      }
+    ],
+    "final_state": {
+      "total_triples": 47,
+      "disconnected_components": 1,
+      "is_connected": true,
+      "iterations_used": 2
+    },
+    "total_api_calls": 3
   }
 }
 ```

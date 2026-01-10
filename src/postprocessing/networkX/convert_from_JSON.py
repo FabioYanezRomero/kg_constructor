@@ -80,7 +80,18 @@ def convert_from_JSON(input_dir: str, output_dir: str):
                     "normalized_tails": 0
                 }
                 
-                # data is a list of dictionaries with at least the fields "head", "relation", "tail", "inference"
+                # data is expected to be a list of dictionaries with triple fields
+                if not isinstance(data, list):
+                    print(f"  Skipping {file}: Not a list of triples")
+                    continue
+                
+                # Check if it's a list of triples by looking at the first item
+                if len(data) > 0:
+                    first_item = data[0]
+                    if not isinstance(first_item, dict) or "head" not in first_item or "relation" not in first_item:
+                        print(f"  Skipping {file}: Internal structure does not match Triple schema")
+                        continue
+                
                 for item in data:
                     # Head, Relation, and Tail are required fields
                     original_head = item["head"]
