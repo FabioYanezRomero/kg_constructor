@@ -125,6 +125,105 @@ class OllamaClient(BaseLLMClient):
         """Return the Ollama model identifier."""
         return f"ollama/{self.model_id}"
 
+    def generate_json(
+        self,
+        text: str,
+        prompt_description: str,
+        format_type: type,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        """Generate structured JSON items directly using Ollama.
+
+        This bypasses langextract to allow for unconstrained generation without
+        the overhead of character-level source grounding. Used for bridging step.
+
+        Args:
+            text: Input text/prompt
+            prompt_description: Instructions for generation
+            format_type: Pydantic model for schema definition
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+
+        Returns:
+            List of dictionaries matching the requested schema
+        """
+        import json
+        import requests
+
+        try:
+            # Build the prompt with schema
+            schema_json = format_type.schema_json()
+            full_prompt = f"""
+{prompt_description}
+
+Return the results as a JSON list of objects matching this JSON schema:
+{schema_json}
+
+Input Text:
+{text}
+
+Respond with ONLY valid JSON, no additional text or markdown.
+"""
+
+            # Call Ollama API directly
+            response = requests.post(
+                f"{self.base_url}/api/generate",
+                json={
+                    "model": self.model_id,
+                    "prompt": full_prompt,
+                    "stream": False,
+                    "format": "json",
+                    "options": {
+                        "temperature": temperature if temperature is not None else 0.0,
+                        **({"num_predict": max_tokens} if max_tokens else {}),
+                    }
+                },
+                timeout=self.timeout
+            )
+            response.raise_for_status()
+
+            result = response.json()
+            response_text = result.get("response", "")
+
+            if not response_text:
+                return []
+
+            # Parse the JSON response with robust extraction
+            response_text = response_text.strip()
+            
+            # Remove markdown code blocks if present
+            import re
+            if response_text.startswith("```"):
+                match = re.search(r"```(?:json)?\s*([\s\S]*?)```", response_text)
+                if match:
+                    response_text = match.group(1).strip()
+            
+            # Find JSON array or object 
+            json_match = re.search(r'(\[[\s\S]*\]|\{[\s\S]*\})', response_text)
+            if json_match:
+                response_text = json_match.group(1)
+            
+            try:
+                data = json.loads(response_text)
+                if isinstance(data, list):
+                    return data
+                elif isinstance(data, dict):
+                    # Some models might return {"items": [...]} or {"triples": [...]}
+                    for key in ["items", "triples", "data", "results", "extractions"]:
+                        if key in data and isinstance(data[key], list):
+                            return data[key]
+                    return [data]
+                return []
+            except json.JSONDecodeError as e:
+                raise LLMClientError(f"Failed to parse JSON response: {e}\nResponse text: {response_text[:500]}")
+
+        except requests.RequestException as e:
+            raise LLMClientError(f"Ollama request failed: {e}") from e
+        except Exception as e:
+            raise LLMClientError(f"Ollama JSON generation failed: {e}") from e
+
     def supports_structured_output(self) -> bool:
         """Ollama generally doesn't support native structured output."""
         return False

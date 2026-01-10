@@ -6,3 +6,4 @@ black>=23.12
 networkx>=3.2
 plotly>=5.19.0
 langextract>=1.1.0
+langextract[openai]
