@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from kg_constructor.examples.base import ExampleSet
 from kg_constructor.examples.default import DefaultExamples
-from kg_constructor.examples.legal import LegalExamples
+from kg_constructor.examples.domains.legal import LegalExamples
 
 # Registry of available example sets
 _EXAMPLE_REGISTRY: dict[str, type[ExampleSet]] = {
