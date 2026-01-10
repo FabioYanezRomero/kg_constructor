@@ -88,50 +88,43 @@ class KnowledgeGraphExtractor:
         )
         return prompt
 
-    def _create_examples(self) -> list[lx.ExampleData]:
+    def _create_examples(self) -> list[Any]:
         """Create few-shot examples for extraction.
 
         Returns:
-            List of ExampleData objects for langextract
+            List of ExampleData with embedded Triple models
         """
-        # Example from legal domain
-        example_text = """H is a three year old child whose parents separated before his birth.
-        From the date of his birth until very recently, H has lived with his maternal
-        grandmother, GB. H's mother, GLB, lived with her mother and H intermittently
-        at GB's home from the time he was born until July 2006."""
+        # Example text
+        text1 = "John Smith works at Google Inc. as a senior software engineer."
 
-        example_triples = [
-            {
-                "head": "H",
-                "relation": "is",
-                "tail": "three-year-old child",
-                "inference": "explicit"
-            },
-            {
-                "head": "H",
-                "relation": "parents separated",
-                "tail": "before his birth",
-                "inference": "explicit"
-            },
-            {
-                "head": "GB",
-                "relation": "is",
-                "tail": "maternal grandmother of H",
-                "inference": "explicit"
-            },
-            {
-                "head": "GLB",
-                "relation": "is",
-                "tail": "mother of H",
-                "inference": "explicit"
-            }
+        # Create Extraction objects with Triple models embedded
+        # Note: For Pydantic structured extraction, we don't use the data field
+        # Instead, we create simple text-based extractions
+        extractions1 = [
+            lx.data.Extraction(
+                extraction_class="Triple",
+                extraction_text="John Smith works_at Google Inc.",
+                char_interval=lx.data.CharInterval(start_pos=0, end_pos=len(text1))
+            ),
+            lx.data.Extraction(
+                extraction_class="Triple",
+                extraction_text="John Smith has_position senior software engineer",
+                char_interval=lx.data.CharInterval(start_pos=0, end_pos=len(text1))
+            )
+        ]
+
+        text2 = "Sigma Corporation is a structured investment vehicle."
+        extractions2 = [
+            lx.data.Extraction(
+                extraction_class="Triple",
+                extraction_text="Sigma Corporation is_type structured investment vehicle",
+                char_interval=lx.data.CharInterval(start_pos=0, end_pos=len(text2))
+            )
         ]
 
         return [
-            lx.ExampleData(
-                input_text=example_text,
-                expected_output=example_triples
-            )
+            lx.data.ExampleData(text=text1, extractions=extractions1),
+            lx.data.ExampleData(text=text2, extractions=extractions2)
         ]
 
     def extract_from_text(
@@ -158,6 +151,7 @@ class KnowledgeGraphExtractor:
             record["id"] = record_id
 
         prompt_text = self._prepare_prompt(record)
+        # Create examples for langextract
         examples = self._create_examples()
 
         # Extract using the client
@@ -245,6 +239,156 @@ class KnowledgeGraphExtractor:
                 results[record_id] = []
 
         return results
+
+    def extract_connected_graph(
+        self,
+        text: str,
+        record_id: str | None = None,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        max_disconnected: int = 3,
+        max_iterations: int = 2
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Extract triples with iterative connectivity improvement.
+
+        This method performs a two-step extraction:
+        1. Initial extraction of explicit and contextual triples
+        2. Iterative refinement to reduce disconnected components
+
+        Args:
+            text: The text to analyze
+            record_id: Optional identifier for logging
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+            max_disconnected: Maximum acceptable disconnected components
+            max_iterations: Maximum refinement iterations
+
+        Returns:
+            Tuple of (triples, metadata) where metadata includes connectivity info
+        """
+        import networkx as nx
+
+        # Step 1: Initial extraction
+        triples = self.extract_from_text(text, record_id, temperature, max_tokens)
+
+        # Build graph and analyze connectivity
+        G = self._build_graph_from_triples(triples)
+        components = list(nx.weakly_connected_components(G))
+        num_components = len(components)
+
+        metadata = {
+            "initial_extraction": {
+                "triples": len(triples),
+                "nodes": G.number_of_nodes(),
+                "edges": G.number_of_edges(),
+                "disconnected_components": num_components,
+            },
+            "refinement_iterations": []
+        }
+
+        # Step 2: Iterative refinement if needed
+        iteration = 0
+        while num_components > max_disconnected and iteration < max_iterations:
+            # Format component information for the prompt
+            component_info = self._format_components(components, G)
+
+            # Create bridging prompt
+            bridging_prompt = f"""
+The previously extracted knowledge graph has {num_components} disconnected components.
+
+Disconnected Components:
+{component_info}
+
+Original Text:
+{text}
+
+Task: Find EXPLICIT relationships in the text that connect these components,
+or infer MINIMAL contextual triples necessary for connectivity. Focus on:
+1. Shared entities between components
+2. Implicit relationships stated in the text
+3. Temporal or causal connections
+4. Hierarchical relationships (part-of, type-of)
+
+Extract ONLY the bridging triples needed to connect components.
+Do not re-extract existing triples.
+"""
+
+            # Extract bridging triples
+            bridging_triples = self.client.extract(
+                text=bridging_prompt,
+                prompt_description="Extract bridging triples to connect graph components",
+                examples=self._create_examples(),
+                format_type=Triple,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+            # Filter out duplicates
+            existing_triples_set = {
+                (t['head'], t['relation'], t['tail'])
+                for t in triples
+            }
+            new_triples = [
+                t for t in bridging_triples
+                if (t['head'], t['relation'], t['tail']) not in existing_triples_set
+            ]
+
+            # Add to triples and rebuild graph
+            triples.extend(new_triples)
+            G = self._build_graph_from_triples(triples)
+            components = list(nx.weakly_connected_components(G))
+            num_components = len(components)
+
+            # Record iteration metadata
+            metadata["refinement_iterations"].append({
+                "iteration": iteration + 1,
+                "new_triples": len(new_triples),
+                "total_triples": len(triples),
+                "disconnected_components": num_components,
+            })
+
+            iteration += 1
+
+        # Final metadata
+        metadata["final_state"] = {
+            "total_triples": len(triples),
+            "nodes": G.number_of_nodes(),
+            "edges": G.number_of_edges(),
+            "disconnected_components": num_components,
+            "is_connected": num_components == 1,
+            "iterations_used": iteration,
+        }
+
+        return triples, metadata
+
+    def _build_graph_from_triples(self, triples: list[dict[str, Any]]):
+        """Build NetworkX graph from triples."""
+        import networkx as nx
+
+        G = nx.DiGraph()
+        for triple in triples:
+            head = triple.get('head', '')
+            tail = triple.get('tail', '')
+            relation = triple.get('relation', '')
+            if head and tail:
+                G.add_edge(head, tail, relation=relation)
+        return G
+
+    def _format_components(
+        self,
+        components: list[set],
+        G
+    ) -> str:
+        """Format disconnected components for prompt."""
+        component_strs = []
+        for i, component in enumerate(components[:10], 1):  # Limit to 10 components
+            nodes = list(component)[:5]  # Limit to 5 nodes per component
+            node_str = ", ".join(nodes)
+            if len(component) > 5:
+                node_str += f" ... ({len(component)} total nodes)"
+            component_strs.append(f"Component {i}: {node_str}")
+
+        return "\n".join(component_strs)
 
     def get_model_name(self) -> str:
         """Get the name of the model being used.

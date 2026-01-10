@@ -4,7 +4,11 @@
       "Bash(wc:*)",
       "Bash(pip show:*)",
       "Bash(python3:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(python:*)",
+      "Bash(chmod:*)",
+      "Bash(bash:*)",
+      "Bash(jq:*)"
     ]
   }
 }

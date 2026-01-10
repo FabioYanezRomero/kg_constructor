@@ -8,6 +8,7 @@ __all__ = [
     # Unified API
     "KnowledgeGraphExtractor",
     "ExtractionPipeline",
+    "EntityVisualizer",
     "ClientConfig",
     "create_client",
     # Client types
@@ -62,5 +63,12 @@ def OllamaClient(*args: Any, **kwargs: Any) -> Any:
 def LMStudioClient(*args: Any, **kwargs: Any) -> Any:
     """Create an LM Studio client."""
     from .clients import LMStudioClient as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def EntityVisualizer(*args: Any, **kwargs: Any) -> Any:
+    """Create an entity visualizer for highlighting entities in text."""
+    from .visualizer import EntityVisualizer as _impl
 
     return _impl(*args, **kwargs)

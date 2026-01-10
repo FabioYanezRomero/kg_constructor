@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
+import requests
 import langextract as lx
 
 from .base import BaseLLMClient, LLMClientError
@@ -58,16 +60,19 @@ class GeminiClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any
     ) -> list[dict[str, Any]]:
-        """Extract knowledge graph triples using Gemini via langextract.
+        """Extract knowledge graph triples using Gemini.
+
+        When format_type is a Pydantic model, uses Google Generative AI SDK directly
+        to avoid langextract's example system incompatibility with Pydantic models.
 
         Args:
             text: Input text to analyze
             prompt_description: Extraction instructions
-            examples: Few-shot examples (list of lx.ExampleData)
+            examples: Few-shot examples (not used with Pydantic models)
             format_type: Pydantic model for structured output
             temperature: Sampling temperature
-            max_tokens: Maximum tokens (not used by langextract)
-            **kwargs: Additional langextract parameters
+            max_tokens: Maximum tokens
+            **kwargs: Additional parameters
 
         Returns:
             List of extracted triples
@@ -76,7 +81,18 @@ class GeminiClient(BaseLLMClient):
             LLMClientError: If extraction fails
         """
         try:
-            # Merge kwargs with instance settings
+            # When using Pydantic models, bypass langextract and use SDK directly
+            # This avoids the incompatibility with langextract's example system
+            if format_type is not None:
+                return self._extract_with_pydantic(
+                    text=text,
+                    prompt_description=prompt_description,
+                    format_type=format_type,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+
+            # For non-Pydantic extraction, use langextract
             langextract_kwargs = {
                 "model_id": self.model_id,
                 "api_key": self.api_key,
@@ -85,12 +101,11 @@ class GeminiClient(BaseLLMClient):
                 "batch_length": self.batch_length,
                 "max_char_buffer": self.max_char_buffer,
                 "show_progress": self.show_progress,
-                "use_schema_constraints": True,
+                "use_schema_constraints": False,
                 "fetch_urls": False,
             }
             langextract_kwargs.update(kwargs)
 
-            # Perform extraction
             result = lx.extract(
                 text_or_documents=text,
                 prompt_description=prompt_description,
@@ -111,6 +126,73 @@ class GeminiClient(BaseLLMClient):
 
         except Exception as e:
             raise LLMClientError(f"Gemini extraction failed: {e}") from e
+
+    def _extract_with_pydantic(
+        self,
+        text: str,
+        prompt_description: str,
+        format_type: type,
+        temperature: float,
+        max_tokens: int | None
+    ) -> list[dict[str, Any]]:
+        """Extract using Gemini API directly via HTTP.
+
+        This bypasses langextract to avoid Pydantic/example incompatibility issues.
+        """
+        try:
+            # Get the Pydantic schema
+            schema_json = format_type.model_json_schema()
+
+            # Build the enhanced prompt with schema
+            full_prompt = f"""{prompt_description}
+
+{text}
+
+Return a JSON array of objects matching this schema:
+{json.dumps(schema_json, indent=2)}
+
+Important: Return ONLY a valid JSON array, no markdown, no explanations."""
+
+            # Call Gemini API directly
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_id}:generateContent?key={self.api_key}"
+
+            payload = {
+                "contents": [{
+                    "parts": [{"text": full_prompt}]
+                }],
+                "generationConfig": {
+                    "temperature": temperature,
+                    "maxOutputTokens": max_tokens or 8192,
+                    "responseMimeType": "application/json"
+                }
+            }
+
+            response = requests.post(url, json=payload, timeout=120)
+            response.raise_for_status()
+
+            result = response.json()
+
+            # Extract text from response
+            if "candidates" in result and len(result["candidates"]) > 0:
+                candidate = result["candidates"][0]
+                if "content" in candidate and "parts" in candidate["content"]:
+                    parts = candidate["content"]["parts"]
+                    if len(parts) > 0 and "text" in parts[0]:
+                        result_text = parts[0]["text"].strip()
+
+                        # Parse JSON
+                        parsed = json.loads(result_text)
+
+                        # Handle both array and single object responses
+                        if isinstance(parsed, list):
+                            return parsed
+                        elif isinstance(parsed, dict):
+                            return [parsed]
+
+            return []
+
+        except Exception as e:
+            raise LLMClientError(f"Pydantic extraction failed: {e}") from e
 
     def get_model_name(self) -> str:
         """Return the Gemini model identifier."""
