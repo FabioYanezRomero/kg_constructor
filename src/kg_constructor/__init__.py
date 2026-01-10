@@ -5,32 +5,62 @@ from __future__ import annotations
 from typing import Any
 
 __all__ = [
-    "build_and_save_graphs",
-    "LangExtractExtractor",
-    "LangExtractPipeline",
-    "ExtractionConfig",
+    # Unified API
+    "KnowledgeGraphExtractor",
+    "ExtractionPipeline",
+    "ClientConfig",
+    "create_client",
+    # Client types
+    "GeminiClient",
+    "OllamaClient",
+    "LMStudioClient",
 ]
 
 
-def build_and_save_graphs(*args: Any, **kwargs: Any) -> Any:
-    from .pipeline import build_and_save_graphs as _impl
+def KnowledgeGraphExtractor(*args: Any, **kwargs: Any) -> Any:
+    """Create a knowledge graph extractor with configurable client."""
+    from .extractor import KnowledgeGraphExtractor as _impl
 
     return _impl(*args, **kwargs)
 
 
-def LangExtractExtractor(*args: Any, **kwargs: Any) -> Any:
-    from .langextract_extractor import LangExtractExtractor as _impl
+def ExtractionPipeline(*args: Any, **kwargs: Any) -> Any:
+    """Create an extraction pipeline with configurable client."""
+    from .extraction_pipeline import ExtractionPipeline as _impl
 
     return _impl(*args, **kwargs)
 
 
-def LangExtractPipeline(*args: Any, **kwargs: Any) -> Any:
-    from .langextract_pipeline import LangExtractPipeline as _impl
+def ClientConfig(*args: Any, **kwargs: Any) -> Any:
+    """Create a client configuration."""
+    from .clients import ClientConfig as _impl
 
     return _impl(*args, **kwargs)
 
 
-def ExtractionConfig(*args: Any, **kwargs: Any) -> Any:
-    from .langextract_extractor import ExtractionConfig as _impl
+def create_client(*args: Any, **kwargs: Any) -> Any:
+    """Create an LLM client from configuration."""
+    from .clients import create_client as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def GeminiClient(*args: Any, **kwargs: Any) -> Any:
+    """Create a Gemini API client."""
+    from .clients import GeminiClient as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def OllamaClient(*args: Any, **kwargs: Any) -> Any:
+    """Create an Ollama client."""
+    from .clients import OllamaClient as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def LMStudioClient(*args: Any, **kwargs: Any) -> Any:
+    """Create an LM Studio client."""
+    from .clients import LMStudioClient as _impl
 
     return _impl(*args, **kwargs)

@@ -1,4 +1,4 @@
-"""Pipeline for processing datasets with langextract and exporting to GraphML."""
+"""Unified pipeline for knowledge graph extraction and export."""
 
 from __future__ import annotations
 
@@ -6,27 +6,43 @@ import json
 from pathlib import Path
 from typing import Any
 
-from kg_constructor.langextract_extractor import ExtractionConfig, LangExtractExtractor
+from kg_constructor.clients import BaseLLMClient, ClientConfig, create_client
+from kg_constructor.extractor import KnowledgeGraphExtractor
 
 
-class LangExtractPipeline:
-    """Orchestrates extraction and export using langextract."""
+class ExtractionPipeline:
+    """Orchestrates knowledge graph extraction, conversion, and visualization.
+
+    This pipeline provides a unified interface for:
+    1. Extracting triples from text using any LLM backend
+    2. Converting to GraphML format (reusing existing code)
+    3. Creating interactive visualizations (reusing existing code)
+    """
 
     def __init__(
         self,
         output_dir: Path,
-        extraction_config: ExtractionConfig | None = None
+        client: BaseLLMClient | None = None,
+        client_config: ClientConfig | None = None,
+        prompt_path: Path | str | None = None
     ) -> None:
         """Initialize the pipeline.
 
         Args:
-            output_dir: Directory to save output JSON files
-            extraction_config: Configuration for langextract extraction
+            output_dir: Directory to save all outputs
+            client: Pre-configured LLM client (takes precedence)
+            client_config: Configuration for creating a client
+            prompt_path: Path to prompt template file
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        self.extractor = LangExtractExtractor(extraction_config)
+        # Initialize extractor with client
+        self.extractor = KnowledgeGraphExtractor(
+            client=client,
+            client_config=client_config,
+            prompt_path=prompt_path
+        )
 
     def process_csv(
         self,
@@ -34,7 +50,8 @@ class LangExtractPipeline:
         text_column: str = "background",
         id_column: str = "id",
         limit: int | None = None,
-        output_subdir: str | None = None
+        output_subdir: str = "json",
+        temperature: float = 0.0
     ) -> dict[str, Path]:
         """Process a CSV file and save triples as JSON files.
 
@@ -43,12 +60,14 @@ class LangExtractPipeline:
             text_column: Name of column containing text
             id_column: Name of column containing record IDs
             limit: Optional limit on number of records
-            output_subdir: Optional subdirectory within output_dir
+            output_subdir: Subdirectory within output_dir for JSON files
+            temperature: Sampling temperature
 
         Returns:
             Dictionary mapping record IDs to output file paths
         """
         print(f"Processing CSV: {csv_path}")
+        print(f"Using model: {self.extractor.get_model_name()}")
         print(f"Text column: {text_column}, ID column: {id_column}")
 
         if limit:
@@ -59,17 +78,14 @@ class LangExtractPipeline:
             csv_path=csv_path,
             text_column=text_column,
             id_column=id_column,
-            limit=limit
+            limit=limit,
+            temperature=temperature
         )
 
-        # Determine output directory
-        if output_subdir:
-            save_dir = self.output_dir / output_subdir
-        else:
-            save_dir = self.output_dir
+        # Save results
+        save_dir = self.output_dir / output_subdir
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save each record's triples to a JSON file
         output_files = {}
         for record_id, triples in results.items():
             output_path = save_dir / f"{record_id}.json"
@@ -86,31 +102,30 @@ class LangExtractPipeline:
         self,
         text: str,
         record_id: str,
-        output_subdir: str | None = None
+        output_subdir: str = "json",
+        temperature: float = 0.0
     ) -> Path:
         """Process a single text and save triples as JSON.
 
         Args:
             text: The text to analyze
             record_id: Identifier for this record
-            output_subdir: Optional subdirectory within output_dir
+            output_subdir: Subdirectory within output_dir
+            temperature: Sampling temperature
 
         Returns:
             Path to the output JSON file
         """
         print(f"Processing record: {record_id}")
+        print(f"Using model: {self.extractor.get_model_name()}")
 
         # Extract triples
-        triples = self.extractor.extract_from_text(text, record_id)
-
-        # Determine output directory
-        if output_subdir:
-            save_dir = self.output_dir / output_subdir
-        else:
-            save_dir = self.output_dir
-        save_dir.mkdir(parents=True, exist_ok=True)
+        triples = self.extractor.extract_from_text(text, record_id, temperature)
 
         # Save to JSON
+        save_dir = self.output_dir / output_subdir
+        save_dir.mkdir(parents=True, exist_ok=True)
+
         output_path = save_dir / f"{record_id}.json"
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(triples, f, ensure_ascii=False, indent=2)
@@ -124,6 +139,9 @@ class LangExtractPipeline:
         graphml_output_dir: Path
     ) -> list[Path]:
         """Convert JSON triples to GraphML format.
+
+        This method reuses the existing convert_from_JSON.py code to ensure
+        compatibility with all downstream tools.
 
         Args:
             json_input_dir: Directory containing JSON files with triples
@@ -156,6 +174,9 @@ class LangExtractPipeline:
     ) -> list[Path]:
         """Create interactive visualizations of GraphML files.
 
+        This method reuses the existing visualisation.py code to ensure
+        consistent visualization across all pipelines.
+
         Args:
             graphml_dir: Directory containing GraphML files
             viz_output_dir: Directory to save HTML visualizations
@@ -186,7 +207,8 @@ class LangExtractPipeline:
         text_column: str = "background",
         id_column: str = "id",
         limit: int | None = None,
-        create_visualizations: bool = True
+        create_visualizations: bool = True,
+        temperature: float = 0.0
     ) -> dict[str, Any]:
         """Run the complete pipeline: extract, convert, visualize.
 
@@ -196,12 +218,16 @@ class LangExtractPipeline:
             id_column: Name of column containing record IDs
             limit: Optional limit on number of records
             create_visualizations: Whether to create HTML visualizations
+            temperature: Sampling temperature
 
         Returns:
             Dictionary with paths to all outputs
         """
         print("=" * 80)
-        print("LANGEXTRACT KNOWLEDGE GRAPH PIPELINE")
+        print("KNOWLEDGE GRAPH EXTRACTION PIPELINE")
+        print("=" * 80)
+        print(f"Model: {self.extractor.get_model_name()}")
+        print(f"Client: {self.extractor.client.__class__.__name__}")
         print("=" * 80)
 
         # Step 1: Extract triples from CSV
@@ -210,13 +236,14 @@ class LangExtractPipeline:
             text_column=text_column,
             id_column=id_column,
             limit=limit,
-            output_subdir="langextract_json"
+            output_subdir="extracted_json",
+            temperature=temperature
         )
 
-        json_dir = self.output_dir / "langextract_json"
+        json_dir = self.output_dir / "extracted_json"
 
         # Step 2: Convert to GraphML
-        graphml_dir = self.output_dir / "langextract_graphml"
+        graphml_dir = self.output_dir / "graphml"
         graphml_files = self.export_to_graphml(
             json_input_dir=json_dir,
             graphml_output_dir=graphml_dir
@@ -226,12 +253,13 @@ class LangExtractPipeline:
             "json_dir": json_dir,
             "json_files": json_files,
             "graphml_dir": graphml_dir,
-            "graphml_files": graphml_files
+            "graphml_files": graphml_files,
+            "model": self.extractor.get_model_name()
         }
 
         # Step 3: Visualize (optional)
         if create_visualizations:
-            viz_dir = self.output_dir / "langextract_visualizations"
+            viz_dir = self.output_dir / "visualizations"
             html_files = self.visualize_graphs(
                 graphml_dir=graphml_dir,
                 viz_output_dir=viz_dir
@@ -242,6 +270,7 @@ class LangExtractPipeline:
         print("\n" + "=" * 80)
         print("PIPELINE COMPLETE")
         print("=" * 80)
+        print(f"Model used: {self.extractor.get_model_name()}")
         print(f"JSON triples: {json_dir}")
         print(f"GraphML files: {graphml_dir}")
         if create_visualizations:
@@ -251,5 +280,5 @@ class LangExtractPipeline:
 
 
 __all__ = [
-    "LangExtractPipeline",
+    "ExtractionPipeline",
 ]

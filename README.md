@@ -1,147 +1,376 @@
 # Knowledge Graph Constructor
 
-This repository automates the generation of knowledge graphs from Hugging Face datasets by orchestrating:
-- dataset retrieval through the `datasets` library,
-- prompt construction for each record,
-- inference against a locally hosted [vLLM](https://github.com/vllm-project/vllm) server, and
-- storage of the model's JSON output for every processed example and dataset split.
+A modular system for extracting knowledge graphs from text using multiple LLM backends. Supports **Gemini API**, **Ollama**, and **LM Studio** with a unified client abstraction interface.
 
-The output artefacts are written as JSON files under `data/output/<dataset_identifier>/<split>/<record>.json`, where slashes in the dataset name are replaced with double underscores, containing the original record, the raw language model response, and the parsed knowledge graph when available.
+## Features
+
+- Clean client abstraction layer supporting multiple LLM backends
+- Support for Gemini API (cloud), Ollama (local), and LM Studio (local)
+- Flexible prompt templates from `src/prompts/`
+- Full GraphML export for NetworkX compatibility
+- Interactive HTML visualizations using Plotly
+- CSV and JSON input support
+- Batch processing with progress tracking
 
 ## Prerequisites
+
 - Python 3.11+
-- A vLLM server exposing the OpenAI-compatible API (for example: `pip install vllm` and `vllm serve pytorch/gemma-3-12b-it-INT4 --dtype bfloat16 --gpu-memory-utilization 0.9`)
-- Optional: Docker and Make for containerised execution and handy automation
+- **For Gemini**: API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+- **For Ollama**: [Ollama](https://ollama.ai/) installed and running locally
+- **For LM Studio**: [LM Studio](https://lmstudio.ai/) server running with a loaded model
+- langextract library (included in requirements)
 
-## Quickstart
+## Quick Start
+
+### Gemini API (Cloud)
 ```bash
-make install            # create a virtual environment and install dependencies
-make run ARGS="--dataset <namespace/dataset> --split train --model pytorch/gemma-3-12b-it-INT4"
+# Set API key
+export LANGEXTRACT_API_KEY="your-gemini-api-key"
+
+# Extract knowledge graphs
+python -m kg_constructor.extract_cli \
+  --client gemini \
+  --csv data/legal/sample_data.csv \
+  --output-dir outputs/results \
+  --limit 3
 ```
 
-### Legal backgrounds quickstart
-Use the dedicated CLI command to transform the legal CSV into the expected format and trigger graph generation without touching the generic pipeline flags:
-
+### Ollama (Local)
 ```bash
-python -m kg_constructor legal \
-  --csv-path data/legal/sample_data.csv \
-  --sample-size 10 \
-  --model abhishekchohan/gemma-3-12b-it-quantized-W4A16
+# Ensure Ollama is running locally
+python -m kg_constructor.extract_cli \
+  --client ollama \
+  --model llama3.1 \
+  --csv data/legal/sample_data.csv \
+  --limit 3
 ```
 
-The command automatically points the Hugging Face loader to the CSV (via `LEGAL_BACKGROUND_SOURCE`), enables `HF_DATASETS_TRUST_REMOTE_CODE`, and uses the tailored prompt at `src/prompts/legal_background_prompt.txt`. Override `--prompt-path` only if you want to experiment with alternative instructions.
-
-The first execution will download the dataset into the local Hugging Face cache. Ensure the vLLM server is running before invoking the command.
-
-## Command-line usage
-You can run the pipeline directly with Python:
+### LM Studio (Local)
 ```bash
-.venv/bin/python -m kg_constructor \
-  --dataset namespace/dataset_name \
-  --dataset-config optional_config \
-  --split train --split validation \
-  --sample-size 25 \
-  --model pytorch/gemma-3-12b-it-INT4 \
-  --prompt-path src/prompts/default_prompt.txt \
-  --output-dir data/output \
-  --parallelism 4 \
-  --inference-url http://localhost:8000 \
-  --temperature 0.0 \
-  --include-prompt
+# Ensure LM Studio server is running
+python -m kg_constructor.extract_cli \
+  --client lmstudio \
+  --model local-model \
+  --base-url http://localhost:1234/v1 \
+  --csv data/legal/sample_data.csv \
+  --limit 3
 ```
 
-### Key options
-- `--dataset / -d`: Hugging Face dataset identifier (required)
-- `--dataset-config / -c`: optional dataset configuration (e.g. language)
-- `--split / -s`: one or more dataset splits to process (`train` by default)
-- `--sample-size`: limit the number of records per split
-- `--model / -m`: model identifier as served by vLLM (`pytorch/gemma-3-12b-it-INT4` by default)
-- `--inference-url`: base URL of the vLLM server (defaults to `http://localhost:8000`; also reads `VLLM_URL`)
-- `--api-key`: optional API key forwarded to the vLLM server
-- `--overwrite`: overwrite existing result files instead of skipping them
-- `--include-prompt`: persist the rendered prompt alongside the model output
-- `--parallelism / -p`: number of concurrent requests issued by the client
-- `--system-prompt`: optional system prompt prepended to every request
-- `--max-tokens`: cap the number of tokens generated per response (omit to use server settings)
-- `--temperature`, `--top-p`, `--top-k`, `--repetition-penalty`: sampling controls forwarded to vLLM
-- `--warmup/--no-warmup`: control whether an initial warm-up request is sent before processing
+## Command-Line Usage
 
-Every invocation produces JSON files such as:
+### Gemini API
+```bash
+python -m kg_constructor.extract_cli \
+  --client gemini \
+  --model gemini-2.0-flash-exp \
+  --csv data/legal/sample_data.csv \
+  --output-dir outputs/gemini \
+  --prompt src/prompts/legal_background_prompt.txt \
+  --limit 10
+```
+
+### Ollama
+```bash
+python -m kg_constructor.extract_cli \
+  --client ollama \
+  --model llama3.1 \
+  --base-url http://localhost:11434 \
+  --csv data/legal/sample_data.csv \
+  --output-dir outputs/ollama \
+  --limit 10
+```
+
+### LM Studio
+```bash
+python -m kg_constructor.extract_cli \
+  --client lmstudio \
+  --model local-model \
+  --base-url http://localhost:1234/v1 \
+  --csv data/legal/sample_data.csv \
+  --output-dir outputs/lmstudio \
+  --limit 10
+```
+
+### CLI Options
+
+- `--client`: LLM backend to use (`gemini`, `ollama`, `lmstudio`)
+- `--model`: Model identifier (e.g., `gemini-2.0-flash-exp`, `llama3.1`)
+- `--csv`: Path to input CSV file
+- `--output-dir`: Directory for output files
+- `--prompt`: Path to prompt template (default: `src/prompts/default_prompt.txt`)
+- `--limit`: Maximum number of records to process
+- `--base-url`: Base URL for Ollama/LM Studio servers
+- `--api-key`: API key for Gemini (or use `LANGEXTRACT_API_KEY` env var)
+
+## Python API
+
+```python
+from pathlib import Path
+from kg_constructor.clients import ClientConfig
+from kg_constructor.extraction_pipeline import ExtractionPipeline
+
+# Configure client
+config = ClientConfig(
+    client_type="gemini",
+    model_id="gemini-2.0-flash-exp",
+    api_key="your-key"
+)
+
+# Create pipeline
+pipeline = ExtractionPipeline(
+    output_dir=Path("outputs/results"),
+    client_config=config,
+    prompt_path=Path("src/prompts/legal_background_prompt.txt")
+)
+
+# Run extraction
+results = pipeline.run_full_pipeline(
+    csv_path=Path("data/legal/sample_data.csv"),
+    limit=5
+)
+```
+
+### Using Different Clients
+
+```python
+# Gemini
+config = ClientConfig(client_type="gemini", api_key="your-key")
+
+# Ollama
+config = ClientConfig(
+    client_type="ollama",
+    model_id="llama3.1",
+    base_url="http://localhost:11434"
+)
+
+# LM Studio
+config = ClientConfig(
+    client_type="lmstudio",
+    model_id="local-model",
+    base_url="http://localhost:1234/v1"
+)
+```
+
+## Output Structure
+
+```
+outputs/results/
+├── extracted_json/       # Triples as JSON
+├── graphml/             # GraphML files (NetworkX compatible)
+└── visualizations/      # Interactive HTML (Plotly)
+```
+
+### JSON Format
+
+Each extracted record produces a JSON file with triples:
+
 ```json
 {
-  "dataset": "namespace/dataset",
-  "dataset_config": null,
-  "split": "train",
   "record_id": "row_000001",
-  "model": "pytorch/gemma-3-12b-it-INT4",
-  "graph": {"nodes": [], "edges": []},
-  "raw_response": "{...}",
-  "input_record": {"text": "example"}
+  "triples": [
+    {
+      "head": "Entity 1",
+      "relation": "relates to",
+      "tail": "Entity 2",
+      "inference": "explicit",
+      "justification": "Quote from text..."
+    }
+  ]
 }
 ```
-The `graph` field contains the parsed JSON object when the model returns valid JSON; otherwise it is `null` and the raw response is preserved for later inspection.
 
-### Post-processing raw responses
-Use the post-processing utility once outputs are available to coerce `raw_response` strings into the canonical `nodes`/`edges` structure:
+### GraphML Format
 
-```bash
-PYTHONPATH=src python -m kg_constructor.postprocess data/output
+GraphML files can be loaded with NetworkX:
+
+```python
+import networkx as nx
+
+G = nx.read_graphml("outputs/results/graphml/row_000001.graphml")
 ```
 
-Add `--force` to overwrite graphs that already exist.
+### Visualizations
 
-### Exporting to NetworkX
-Convert any processed JSON artefact into a NetworkX graph representation:
+Interactive HTML files with Plotly graphs showing:
+- Nodes as entities
+- Edges as relationships
+- Hover tooltips with metadata
 
-```bash
-PYTHONPATH=src python -m kg_constructor.networkx_export data/output/SetFit__ag_news/train/row_000002.json --format graphml
+## Module Structure
+
+```
+src/kg_constructor/
+├── clients/                  # Client abstraction layer
+│   ├── __init__.py          # Exports
+│   ├── base.py              # BaseLLMClient interface
+│   ├── factory.py           # ClientConfig & create_client()
+│   ├── gemini_client.py     # Gemini API implementation
+│   ├── ollama_client.py     # Ollama implementation
+│   └── lmstudio_client.py   # LM Studio implementation
+│
+├── extractor.py             # KnowledgeGraphExtractor
+├── extraction_pipeline.py   # ExtractionPipeline
+├── extract_cli.py           # Unified CLI
+└── json_utils.py            # JSON parsing helpers
 ```
 
-Supported formats: `graphml`, `gpickle`, and `json` (node-link schema). The exporter preserves all node and edge attributes present in the structured graph.
+### Postprocessing Module
 
-### Batching graph pickles
-Once individual `.gpickle` files exist, you can collapse them into larger batch files to reduce filesystem pressure:
-
-```bash
-PYTHONPATH=src python -m kg_constructor.batch_graphs outputs outputs_batched \
-  --batch-size 1000 --delete-source
+```
+src/postprocessing/
+├── networkX/
+│   ├── convert_from_JSON.py  # JSON → GraphML converter
+│   └── visualisation.py      # Interactive HTML visualizations
+│
+└── legacy/                   # Legacy utilities
+    ├── networkx_export.py    # NetworkX export
+    ├── export_graphs.py      # Graph export utilities
+    ├── batch_graphs.py       # Batch processing
+    └── postprocess.py        # Post-processing utilities
 ```
 
-Each batch file stores a list of `{record_id, graph}` entries for a single dataset split. Omit `--delete-source` if you prefer to keep the original per-record files.
-The per-record payload also preserves the original dataset label information (`label`, `label_text`) alongside the NetworkX graph.
+### Prompt Templates
 
-## Docker workflow
-```bash
-make docker-build
-make docker-run ARGS="--dataset <namespace/dataset> --split train"
 ```
-The Docker image exposes `VLLM_URL` (defaulting to `http://localhost:8000`) and mounts `./data/output` into the container to persist results. Ensure your vLLM instance is accessible from inside the container (using `--network host` in the Makefile).
+src/prompts/
+├── default_prompt.txt           # Generic extraction
+└── legal_background_prompt.txt  # Legal domain-specific
+```
 
-## Project layout
+## Project Layout
+
 ```
-├── Dockerfile
-├── Makefile
 ├── README.md
 ├── requirements.txt
 ├── src/
-│   ├── kg_constructor/
-│   │   ├── __main__.py          # Typer CLI entry point
-│   │   ├── config.py            # Dataclasses describing runtime configuration
-│   │   ├── dataset_loader.py    # Hugging Face dataset loading utilities
-│   │   ├── json_utils.py        # Helpers to normalise model JSON outputs
-│   │   ├── pipeline.py          # Orchestrates prompt generation and persistence
-│   │   ├── vllm_client.py       # Minimal HTTP client for vLLM
-│   │   └── prompt_builder.py    # Renders prompts based on template placeholders
-│   └── prompts/
-│       └── default_prompt.txt   # Default knowledge graph prompt template
-└── data/
-    └── output/                  # Generated graphs organised by dataset and split
+│   ├── kg_constructor/          # Main package
+│   ├── prompts/                 # Prompt templates
+│   └── postprocessing/          # Post-processing tools
+├── data/                        # Input data
+├── outputs/                     # Output files
+├── docs/                        # Documentation
+└── examples/                    # Working examples
 ```
 
-## Development notes
-- Use `make format` to apply Black formatting.
-- Extend or replace `src/prompts/default_prompt.txt` to tailor the instructions for your dataset.
-- Set environment variables (e.g. `VLLM_URL`) to target remote or containerised vLLM instances.
+## Architecture
 
-## Testing the setup
-While this repository does not include automated tests yet, you can validate connectivity by running the CLI with `--sample-size 1` on a small dataset split and confirming that a JSON artefact appears inside `data/output/`.
+### Client Abstraction Layer
+
+All LLM backends implement the `BaseLLMClient` interface:
+
+```python
+from abc import ABC, abstractmethod
+
+class BaseLLMClient(ABC):
+    @abstractmethod
+    def extract(
+        self,
+        text: str,
+        prompt_description: str,
+        examples: list | None = None,
+        format_type: type | None = None,
+        temperature: float = 0.0,
+        **kwargs
+    ) -> list[dict]:
+        """Extract structured data from text."""
+        pass
+
+    @abstractmethod
+    def get_model_name(self) -> str:
+        """Return the model identifier."""
+        pass
+
+    @abstractmethod
+    def supports_structured_output(self) -> bool:
+        """Whether this client supports structured output."""
+        pass
+```
+
+### Factory Pattern
+
+The `create_client()` factory creates the appropriate client:
+
+```python
+from kg_constructor.clients import create_client, ClientConfig
+
+config = ClientConfig(client_type="gemini")
+client = create_client(config)  # Returns GeminiClient
+```
+
+### Pipeline Architecture
+
+1. **Extract**: `KnowledgeGraphExtractor` extracts triples from text using any LLM backend
+2. **Convert**: `convert_from_JSON` converts JSON triples to GraphML format
+3. **Visualize**: `batch_visualize_graphml` creates interactive HTML visualizations
+
+All components are fully decoupled and can be used independently.
+
+## Development
+
+### Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Format Code
+
+```bash
+make format
+```
+
+### Custom Prompts
+
+Create custom prompt templates in `src/prompts/`:
+
+```text
+Extract entities and relationships from the following text:
+
+{{record_json}}
+
+Return a JSON list of triples with this format:
+[
+  {
+    "head": "Entity 1",
+    "relation": "relationship",
+    "tail": "Entity 2",
+    "inference": "explicit or contextual",
+    "justification": "supporting quote"
+  }
+]
+```
+
+Then use it:
+
+```bash
+python -m kg_constructor.extract_cli \
+  --prompt src/prompts/my_custom_prompt.txt \
+  --csv data/my_data.csv
+```
+
+## Documentation
+
+- [Unified Extraction Guide](docs/UNIFIED_EXTRACTION_GUIDE.md) - Complete system documentation
+- [Quick Reference](README_UNIFIED_EXTRACTION.md) - Fast-start guide
+- [Examples](examples/unified_extraction_examples.py) - Working code examples
+
+## Testing
+
+Validate your setup by processing a small sample:
+
+```bash
+python -m kg_constructor.extract_cli \
+  --client gemini \
+  --csv data/legal/sample_data.csv \
+  --limit 1 \
+  --output-dir outputs/test
+```
+
+Check that the output directory contains:
+- `extracted_json/` with JSON triples
+- `graphml/` with GraphML files
+- `visualizations/` with HTML files
+
+## License
+
+See LICENSE file for details.
