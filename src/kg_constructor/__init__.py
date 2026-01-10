@@ -15,6 +15,11 @@ __all__ = [
     "GeminiClient",
     "OllamaClient",
     "LMStudioClient",
+    # Examples
+    "ExampleSet",
+    "DefaultExamples",
+    "LegalExamples",
+    "get_examples",
 ]
 
 
@@ -70,5 +75,33 @@ def LMStudioClient(*args: Any, **kwargs: Any) -> Any:
 def EntityVisualizer(*args: Any, **kwargs: Any) -> Any:
     """Create an entity visualizer for highlighting entities in text."""
     from .visualizer import EntityVisualizer as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def ExampleSet(*args: Any, **kwargs: Any) -> Any:
+    """Base class for example sets."""
+    from .examples import ExampleSet as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def DefaultExamples(*args: Any, **kwargs: Any) -> Any:
+    """Get default examples for general-purpose extraction."""
+    from .examples import DefaultExamples as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def LegalExamples(*args: Any, **kwargs: Any) -> Any:
+    """Get legal domain examples."""
+    from .examples import LegalExamples as _impl
+
+    return _impl(*args, **kwargs)
+
+
+def get_examples(*args: Any, **kwargs: Any) -> Any:
+    """Get examples by domain name (default, legal, etc.)."""
+    from .examples import get_examples as _impl
 
     return _impl(*args, **kwargs)

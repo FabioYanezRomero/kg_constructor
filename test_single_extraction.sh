@@ -32,8 +32,8 @@ RECORD_ID="UKSC-2009-0143"  # The ID/key of the specific record to process
 TEXT_FIELD="text"  # Field name containing the text to analyze
 
 # Prompt Configuration (Two-Step Extraction)
-PROMPT_FILE_STEP1="/app/src/prompts/legal_background_prompt_step1_initial.txt"  # Initial extraction prompt
-PROMPT_FILE_STEP2="/app/src/prompts/legal_background_prompt_step2_bridging.txt"  # Bridging/refinement prompt
+PROMPT_FILE_STEP1="/app/src/kg_constructor/prompts/legal_background_prompt_step1_initial.txt"  # Initial extraction prompt
+PROMPT_FILE_STEP2="/app/src/kg_constructor/prompts/legal_background_prompt_step2_bridging.txt"  # Bridging/refinement prompt
 
 # Output Configuration
 OUTPUT_DIR="/app/test_outputs/single_extraction_$(date +%Y%m%d_%H%M%S)"

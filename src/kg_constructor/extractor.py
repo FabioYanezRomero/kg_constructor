@@ -10,6 +10,7 @@ import langextract as lx
 from pydantic import BaseModel, Field
 
 from kg_constructor.clients import BaseLLMClient, ClientConfig, create_client
+from kg_constructor.examples import ExampleSet, get_examples
 
 
 class Triple(BaseModel):
@@ -40,7 +41,8 @@ class KnowledgeGraphExtractor:
         client: BaseLLMClient | None = None,
         client_config: ClientConfig | None = None,
         prompt_path: Path | str | None = None,
-        bridging_prompt_path: Path | str | None = None
+        bridging_prompt_path: Path | str | None = None,
+        examples: ExampleSet | str | None = None
     ) -> None:
         """Initialize the extractor.
 
@@ -49,6 +51,7 @@ class KnowledgeGraphExtractor:
             client_config: Configuration for creating a client
             prompt_path: Path to prompt template file for initial extraction (default: prompts/default_prompt.txt)
             bridging_prompt_path: Path to prompt template for bridging/refinement (optional, uses hardcoded if not provided)
+            examples: ExampleSet instance or domain name (e.g., 'legal', 'default'). If None, uses 'default'.
 
         Raises:
             ValueError: If neither client nor client_config is provided
@@ -62,10 +65,18 @@ class KnowledgeGraphExtractor:
             # Default to Gemini
             self.client = create_client(ClientConfig(client_type="gemini"))
 
+        # Set up examples
+        if examples is None:
+            self._example_set = get_examples("default")
+        elif isinstance(examples, str):
+            self._example_set = get_examples(examples)
+        else:
+            self._example_set = examples
+
         # Load prompt template for initial extraction
         if prompt_path is None:
-            # Default to the generic prompt
-            prompt_path = Path(__file__).parent.parent / "prompts" / "default_prompt.txt"
+            # Default to the generic prompt (now inside kg_constructor)
+            prompt_path = Path(__file__).parent / "prompts" / "default_prompt.txt"
         else:
             prompt_path = Path(prompt_path)
 
@@ -103,83 +114,9 @@ class KnowledgeGraphExtractor:
 
         Returns:
             List of ExampleData with Triple schema attributes.
-            Uses attributes dict format compatible with langextract + Gemini.
+            Uses the configured example set.
         """
-        # Example 1: Employment relationships
-        text1 = "John Smith works at Google Inc. as a senior software engineer."
-        extractions1 = [
-            lx.data.Extraction(
-                extraction_class="Triple",
-                extraction_text="John Smith works at Google Inc.",
-                char_interval=lx.data.CharInterval(start_pos=0, end_pos=31),
-                attributes={
-                    "head": "John Smith",
-                    "relation": "works_at",
-                    "tail": "Google Inc.",
-                    "inference": "explicit",
-                }
-            ),
-            lx.data.Extraction(
-                extraction_class="Triple",
-                extraction_text="John Smith ... senior software engineer",
-                char_interval=lx.data.CharInterval(start_pos=0, end_pos=61),
-                attributes={
-                    "head": "John Smith",
-                    "relation": "has_position",
-                    "tail": "senior software engineer",
-                    "inference": "explicit",
-                }
-            )
-        ]
-
-        # Example 2: Entity classification
-        text2 = "Sigma Corporation is a structured investment vehicle."
-        extractions2 = [
-            lx.data.Extraction(
-                extraction_class="Triple",
-                extraction_text="Sigma Corporation is a structured investment vehicle",
-                char_interval=lx.data.CharInterval(start_pos=0, end_pos=52),
-                attributes={
-                    "head": "Sigma Corporation",
-                    "relation": "is_type",
-                    "tail": "structured investment vehicle",
-                    "inference": "explicit",
-                }
-            )
-        ]
-
-        # Example 3: Legal relationships (relevant for legal domain)
-        text3 = "Sarah Johnson from Morrison & Foerster represents the plaintiff in the case."
-        extractions3 = [
-            lx.data.Extraction(
-                extraction_class="Triple",
-                extraction_text="Sarah Johnson from Morrison & Foerster",
-                char_interval=lx.data.CharInterval(start_pos=0, end_pos=38),
-                attributes={
-                    "head": "Sarah Johnson",
-                    "relation": "works_at",
-                    "tail": "Morrison & Foerster",
-                    "inference": "explicit",
-                }
-            ),
-            lx.data.Extraction(
-                extraction_class="Triple",
-                extraction_text="Sarah Johnson ... represents the plaintiff",
-                char_interval=lx.data.CharInterval(start_pos=0, end_pos=59),
-                attributes={
-                    "head": "Sarah Johnson",
-                    "relation": "represents",
-                    "tail": "plaintiff",
-                    "inference": "explicit",
-                }
-            )
-        ]
-
-        return [
-            lx.data.ExampleData(text=text1, extractions=extractions1),
-            lx.data.ExampleData(text=text2, extractions=extractions2),
-            lx.data.ExampleData(text=text3, extractions=extractions3),
-        ]
+        return self._example_set.get_examples()
 
     def get_examples_as_dict(self) -> list[dict[str, Any]]:
         """Export few-shot examples in JSON-serializable format.
@@ -187,26 +124,7 @@ class KnowledgeGraphExtractor:
         Returns:
             List of example dictionaries for saving to examples.json
         """
-        examples = self._create_examples()
-        result = []
-        for example in examples:
-            example_dict = {
-                "text": example.text,
-                "extractions": []
-            }
-            for extraction in example.extractions:
-                ext_dict = {
-                    "extraction_class": extraction.extraction_class,
-                    "extraction_text": extraction.extraction_text,
-                }
-                if extraction.char_interval:
-                    ext_dict["char_start"] = extraction.char_interval.start_pos
-                    ext_dict["char_end"] = extraction.char_interval.end_pos
-                if extraction.attributes:
-                    ext_dict["attributes"] = extraction.attributes
-                example_dict["extractions"].append(ext_dict)
-            result.append(example_dict)
-        return result
+        return self._example_set.get_examples_as_dict()
 
     def _get_extraction_prompt_description(self) -> str:
         """Get the prompt description for triple extraction.
