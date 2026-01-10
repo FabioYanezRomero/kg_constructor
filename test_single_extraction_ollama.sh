@@ -4,26 +4,21 @@
 # HYPERPARAMETERS - Configure these at the top
 ################################################################################
 
-# API Key Configuration (for Gemini only)
-# Option 1: Set here (not recommended for security)
-# GEMINI_API_KEY="your-api-key-here"
-
-# Option 2: Set as environment variable (recommended)
-# export LANGEXTRACT_API_KEY="your-api-key-here"
-# or
-# export GOOGLE_API_KEY="your-api-key-here"
-
-# Option 3: Load from .env file
-# The script will automatically check for .env file in /app
+# Ollama Configuration
+# Make sure Ollama is running and has a model loaded
+# Default server URL is http://localhost:11434/v1
 
 # Model Configuration
-MODEL_PROVIDER="gemini"  # Options: gemini, ollama, lmstudio
-MODEL_NAME="gemini-2.0-flash"  # For gemini: gemini-2.0-flash, gemini-2.5-flash, etc.
+MODEL_PROVIDER="ollama"  # Using Ollama local model
+MODEL_NAME="gemma3:12b"  # Use the model name shown in Ollama
 TEMPERATURE=0.0
+
+# Ollama Server Configuration
+LMSTUDIO_BASE_URL="http://localhost:11434"  # Default Ollama URL (no /v1 for native API)
 
 # LangExtract Configuration (NEW - leverages full langextract features)
 EXTRACTION_PASSES=1      # Multiple passes for higher recall (1-3 recommended)
-MAX_WORKERS=10           # Parallel processing workers for long documents
+MAX_WORKERS=5            # Parallel processing workers (lower for local models)
 MAX_CHAR_BUFFER=8000     # Maximum characters per chunk for long documents
 
 # Input Data
@@ -36,7 +31,7 @@ PROMPT_FILE_STEP1="/app/src/kg_constructor/prompts/legal_background_prompt_step1
 PROMPT_FILE_STEP2="/app/src/kg_constructor/prompts/legal_background_prompt_step2_bridging.txt"  # Bridging/refinement prompt
 
 # Output Configuration
-OUTPUT_DIR="/app/test_outputs/single_extraction_$(date +%Y%m%d_%H%M%S)"
+OUTPUT_DIR="/app/test_outputs/single_extraction_ollama_$(date +%Y%m%d_%H%M%S)"
 
 # Visualization Options
 CREATE_ENTITY_VIZ=true  # Create langextract HTML visualization
@@ -53,49 +48,13 @@ MAX_ITERATIONS=5    # Max refinement iterations (increased to 5 to push for full
 
 set -e  # Exit on error
 
-# Load .env file if it exists
-if [ -f "/app/.env" ]; then
-    echo "Loading environment variables from /app/.env"
-    export $(grep -v '^#' /app/.env | xargs)
-fi
-
-# Check API key for Gemini
-if [ "$MODEL_PROVIDER" = "gemini" ]; then
-    if [ -z "$LANGEXTRACT_API_KEY" ] && [ -z "$GOOGLE_API_KEY" ] && [ -z "$GEMINI_API_KEY" ]; then
-        echo "================================================================================"
-        echo "ERROR: Gemini API key not found!"
-        echo "================================================================================"
-        echo ""
-        echo "Please set your API key using one of these methods:"
-        echo ""
-        echo "1. Environment variable (recommended):"
-        echo "   export LANGEXTRACT_API_KEY='your-api-key-here'"
-        echo "   or"
-        echo "   export GOOGLE_API_KEY='your-api-key-here'"
-        echo ""
-        echo "2. Create .env file:"
-        echo "   echo 'LANGEXTRACT_API_KEY=your-api-key-here' > /app/.env"
-        echo ""
-        echo "3. Set in script (not recommended):"
-        echo "   Edit this script and uncomment the GEMINI_API_KEY line at the top"
-        echo ""
-        echo "Get your API key from: https://aistudio.google.com/app/apikey"
-        echo "================================================================================"
-        exit 1
-    fi
-
-    # Use GEMINI_API_KEY if set in script, otherwise use env vars
-    if [ -n "$GEMINI_API_KEY" ]; then
-        export LANGEXTRACT_API_KEY="$GEMINI_API_KEY"
-    fi
-fi
-
 echo "================================================================================"
-echo "KNOWLEDGE GRAPH EXTRACTION - SINGLE TEXT TEST"
+echo "KNOWLEDGE GRAPH EXTRACTION - SINGLE TEXT TEST (Ollama)"
 echo "Using LangExtract for: Source Grounding, Few-shot Learning, Long Doc Optimization"
 echo "================================================================================"
 echo "Model Provider: $MODEL_PROVIDER"
 echo "Model Name: $MODEL_NAME"
+echo "Ollama URL: $LMSTUDIO_BASE_URL"
 echo "Input JSON: $INPUT_JSON"
 echo "Record ID: $RECORD_ID"
 echo "Text Field: $TEXT_FIELD"
@@ -109,12 +68,37 @@ echo ""
 echo "Extraction Method: Two-Step Connectivity-Aware"
 echo "  • Max disconnected: $MAX_DISCONNECTED"
 echo "  • Max iterations: $MAX_ITERATIONS"
-if [ "$MODEL_PROVIDER" = "gemini" ]; then
-    if [ -n "$LANGEXTRACT_API_KEY" ] || [ -n "$GOOGLE_API_KEY" ]; then
-        echo "API Key: ✓ Configured"
-    fi
-fi
 echo "================================================================================"
+
+# Check if Ollama is reachable using Python (curl may not be available)
+echo ""
+echo "Checking Ollama connection..."
+python3 -c "
+import requests
+import sys
+try:
+    r = requests.get('$LMSTUDIO_BASE_URL/api/tags', timeout=5)
+    if r.status_code == 200:
+        print('✓ Ollama is reachable at $LMSTUDIO_BASE_URL')
+        models = r.json().get('models', [])
+        if models:
+            print(f'  Available models: {[m.get(\"name\", \"unknown\") for m in models]}')
+        sys.exit(0)
+except Exception as e:
+    pass
+print('================================================================================')
+print('WARNING: Cannot reach Ollama at $LMSTUDIO_BASE_URL')
+print('================================================================================')
+print('')
+print('Please ensure:')
+print('1. Ollama is running')
+print('2. A model is loaded in Ollama')
+print('3. The server is enabled (Settings > Local Server)')
+print('4. The URL is correct (default: http://localhost:11434/v1)')
+print('')
+print('Continuing anyway - the script will fail if Ollama is not available.')
+print('================================================================================')
+"
 
 # Create output directory structure
 mkdir -p "$OUTPUT_DIR"/{json,graphml,metadata,entity_viz,graph_viz}
@@ -124,7 +108,7 @@ PYTHON_SCRIPT="$OUTPUT_DIR/extract_single.py"
 
 cat > "$PYTHON_SCRIPT" << 'PYTHON_EOF'
 #!/usr/bin/env python3
-"""Single text extraction script using full LangExtract integration.
+"""Single text extraction script using full LangExtract integration with Ollama.
 
 This script leverages all langextract features:
 - Source Grounding: Character-level positions for each extraction
@@ -161,6 +145,7 @@ def main():
     extraction_passes = int(sys.argv[15])
     max_workers = int(sys.argv[16])
     max_char_buffer = int(sys.argv[17])
+    ollama_base_url = sys.argv[18]
 
     print(f"\n{'='*80}")
     print("STEP 1: LOADING INPUT DATA")
@@ -233,10 +218,10 @@ def main():
     print(f"{text[:200]}...")
 
     print(f"\n{'='*80}")
-    print("STEP 2: INITIALIZING EXTRACTION PIPELINE (WITH LANGEXTRACT)")
+    print("STEP 2: INITIALIZING EXTRACTION PIPELINE (WITH LANGEXTRACT + LM STUDIO)")
     print(f"{'='*80}")
 
-    # Configure client with langextract parameters
+    # Configure client with langextract parameters for Ollama
     config = ClientConfig(
         client_type=model_provider,
         model_id=model_name,
@@ -245,6 +230,9 @@ def main():
         max_workers=max_workers,
         max_char_buffer=max_char_buffer,
         show_progress=True,
+        # Ollama specific configuration
+        base_url=ollama_base_url,
+        api_key="lm-studio",  # Ollama default API key
     )
 
     # Two-step extraction prompts
@@ -265,6 +253,7 @@ def main():
 
     print(f"✓ Client: {pipeline.extractor.client.__class__.__name__}")
     print(f"✓ Model: {pipeline.extractor.get_model_name()}")
+    print(f"✓ Ollama URL: {ollama_base_url}")
     print(f"✓ Temperature: {temperature}")
     print(f"\nLangExtract Features Enabled:")
     print(f"  ✓ Source Grounding (char_start, char_end for each triple)")
@@ -273,7 +262,7 @@ def main():
     print(f"  ✓ Long Document Optimization (passes={extraction_passes}, workers={max_workers})")
 
     print(f"\n{'='*80}")
-    print("STEP 3: EXTRACTING TRIPLES WITH LANGEXTRACT")
+    print("STEP 3: EXTRACTING TRIPLES WITH LANGEXTRACT (LM STUDIO)")
     print(f"{'='*80}")
 
     # Two-step extraction with connectivity awareness
@@ -313,7 +302,14 @@ def main():
     print(f"{'='*80}")
     
     source_grounded = sum(1 for t in triples if t.get("char_start") is not None)
-    print(f"Source grounded triples: {source_grounded}/{len(triples)} ({100*source_grounded/len(triples):.1f}%)")
+    sg_pct = (100 * source_grounded / len(triples)) if triples else 0
+    
+    # Calculate Explicit Grounding Accuracy (only against triples that CAN be grounded)
+    explicit_count_sg = sum(1 for t in triples if t.get('inference') == 'explicit')
+    explicit_sg_pct = (100 * source_grounded / explicit_count_sg) if explicit_count_sg > 0 else 0
+    
+    print(f"Source grounded triples: {source_grounded}/{len(triples)} ({sg_pct:.1f}%)")
+    print(f"Explicit Grounding Accuracy: {source_grounded}/{explicit_count_sg} ({explicit_sg_pct:.1f}%)")
     
     # Iteration tracking stats
     initial_count = sum(1 for t in triples if t.get("iteration_source") == 0)
@@ -433,6 +429,7 @@ def main():
             "timestamp": datetime.now().isoformat(),
             "model_provider": model_provider,
             "model_name": model_name,
+            "ollama_base_url": ollama_base_url,
             "temperature": temperature,
             "prompt_step1": str(prompt_file_step1) if prompt_file_step1 else "default",
             "prompt_step2": str(prompt_file_step2) if prompt_file_step2 else "hardcoded",
@@ -581,7 +578,7 @@ chmod +x "$PYTHON_SCRIPT"
 
 # Run the extraction
 echo ""
-echo "Running extraction pipeline with LangExtract..."
+echo "Running extraction pipeline with LangExtract (Ollama)..."
 echo ""
 
 python3 "$PYTHON_SCRIPT" \
@@ -601,7 +598,8 @@ python3 "$PYTHON_SCRIPT" \
     "$PROMPT_FILE_STEP2" \
     "$EXTRACTION_PASSES" \
     "$MAX_WORKERS" \
-    "$MAX_CHAR_BUFFER"
+    "$MAX_CHAR_BUFFER" \
+    "$LMSTUDIO_BASE_URL"
 
 EXTRACTION_EXIT_CODE=$?
 

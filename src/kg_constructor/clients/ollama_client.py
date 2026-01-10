@@ -1,13 +1,66 @@
-"""Ollama client using langextract for knowledge graph extraction."""
-
-from __future__ import annotations
-
-from typing import Any
-
+import dataclasses
+from typing import Any, Iterator, Sequence, Mapping
 import langextract as lx
-from langextract.providers.ollama import OllamaLanguageModel
+from langextract.providers.openai import OpenAILanguageModel
+from langextract.core import types as core_types
+from langextract.core import exceptions as lx_exceptions
 
 from .base import BaseLLMClient, LLMClientError
+
+
+@dataclasses.dataclass(init=False)
+class OllamaOpenAILanguageModel(OpenAILanguageModel):
+    """Custom OpenAI model for Ollama that removes unsupported response_format."""
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+    @property
+    def requires_fence_output(self) -> bool:
+        """Ollama/LM Studio output needs fences when not using structured mode."""
+        return True
+
+    def _process_single_prompt(self, prompt: str, config: dict[str, Any]) -> core_types.ScoredOutput:
+        """Override to remove response_format and add logging."""
+        try:
+            # Get model configuration
+            model_config = self.merge_kwargs(config)
+            
+            # Explicitly remove response_format as it can cause issues in Ollama/LM Studio
+            model_config.pop('response_format', None)
+            
+            # Standard system message for JSON
+            system_message = (
+                "You are a helpful assistant that extracts information into structured JSON. "
+                "Follow the provided format Exactly, matching the field names and structure of the examples. "
+                "You may use ```json code fences. Do not include any preamble or extra explanations."
+            )
+
+            messages = [{'role': 'user', 'content': prompt}]
+            messages.insert(0, {'role': 'system', 'content': system_message})
+
+            api_params = {
+                'model': self.model_id,
+                'messages': messages,
+                'n': 1,
+            }
+
+            temp = model_config.get('temperature', self.temperature)
+            if temp is not None:
+                api_params['temperature'] = temp
+
+            if (v := model_config.get('max_output_tokens')) is not None:
+                api_params['max_tokens'] = v
+
+            response = self._client.chat.completions.create(**api_params)
+            output_text = response.choices[0].message.content
+
+            return core_types.ScoredOutput(score=1.0, output=output_text)
+
+        except Exception as e:
+            raise lx_exceptions.InferenceRuntimeError(
+                f'Ollama OpenAI API error: {str(e)}', original=e
+            ) from e
 
 
 class OllamaClient(BaseLLMClient):
@@ -74,10 +127,16 @@ class OllamaClient(BaseLLMClient):
             LLMClientError: If extraction fails
         """
         try:
-            # Create Ollama language model
-            ollama_model = OllamaLanguageModel(
+            # Ensure base_url ends with /v1 for the OpenAI provider
+            base_url = self.base_url
+            if not base_url.endswith('/v1') and not base_url.endswith('/v1/'):
+                base_url = base_url.rstrip('/') + '/v1'
+
+            # Create Ollama OpenAI language model
+            ollama_model = OllamaOpenAILanguageModel(
                 model_id=self.model_id,
-                base_url=self.base_url,
+                api_key="ollama", # Placeholder for OpenAI provider
+                base_url=base_url,
                 timeout=self.timeout
             )
 
@@ -89,9 +148,12 @@ class OllamaClient(BaseLLMClient):
                 "batch_length": self.batch_length,
                 "max_char_buffer": self.max_char_buffer,
                 "show_progress": self.show_progress,
-                "use_schema_constraints": False,  # Ollama may not support schema
+                "use_schema_constraints": False, 
                 "fence_output": True,  # Expect JSON in code fences
                 "fetch_urls": False,
+                "resolver_params": {
+                    "require_extractions_key": False,
+                }
             }
 
             if max_tokens:
@@ -104,17 +166,47 @@ class OllamaClient(BaseLLMClient):
                 text_or_documents=text,
                 prompt_description=prompt_description,
                 examples=examples or [],
-                format_type=format_type,
                 **langextract_kwargs
             )
 
             # Extract triples from result
             triples = []
-            if hasattr(result, 'extractions'):
+            if hasattr(result, 'extractions') and result.extractions:
                 for extraction in result.extractions:
-                    if hasattr(extraction, 'data') and extraction.data:
-                        triple_dict = extraction.data.model_dump()
-                        triples.append(triple_dict)
+                    # Robust attribute extraction (handles both wrapped and flat formats)
+                    attrs = extraction.attributes
+                    
+                    # If attributes is None, it might be a flat dict in extraction_text or data
+                    if attrs is None:
+                        # Some versions of langextract might put the dict in extraction_text if it's flat
+                        if isinstance(extraction.extraction_text, str):
+                            try:
+                                import json
+                                text_trimmed = extraction.extraction_text.strip()
+                                if text_trimmed.startswith('{') and text_trimmed.endswith('}'):
+                                    attrs = json.loads(text_trimmed)
+                            except:
+                                pass
+                    
+                    if attrs:
+                        # Ensure it's a dict
+                        triple = dict(attrs)
+                        
+                        # Add source grounding information from langextract
+                        if extraction.char_interval:
+                            triple["char_start"] = extraction.char_interval.start_pos
+                            triple["char_end"] = extraction.char_interval.end_pos
+                        else:
+                            triple["char_start"] = None
+                            triple["char_end"] = None
+                        
+                        # Add extraction metadata
+                        triple["extraction_text"] = str(extraction.extraction_text)
+                        triple["extraction_class"] = str(extraction.extraction_class)
+                        
+                        # Basic validation: must have head, relation, tail
+                        if all(k in triple for k in ('head', 'relation', 'tail')):
+                            triples.append(triple)
 
             return triples
 
@@ -208,14 +300,25 @@ Respond with ONLY valid JSON, no additional text or markdown.
             try:
                 data = json.loads(response_text)
                 if isinstance(data, list):
-                    return data
+                    items = data
                 elif isinstance(data, dict):
                     # Some models might return {"items": [...]} or {"triples": [...]}
+                    items = []
                     for key in ["items", "triples", "data", "results", "extractions"]:
                         if key in data and isinstance(data[key], list):
-                            return data[key]
-                    return [data]
-                return []
+                            items = data[key]
+                            break
+                    if not items:
+                        items = [data]
+                else:
+                    return []
+
+                # Force inference to contextual for bridging (consistency across providers)
+                for item in items:
+                    if isinstance(item, dict):
+                        item['inference'] = 'contextual'
+                
+                return items
             except json.JSONDecodeError as e:
                 raise LLMClientError(f"Failed to parse JSON response: {e}\nResponse text: {response_text[:500]}")
 

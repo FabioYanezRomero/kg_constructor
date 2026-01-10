@@ -456,7 +456,8 @@ def main():
             "explicit_percentage": round(100 * explicit_count / len(triples), 2) if triples else 0,
             "contextual_percentage": round(100 * contextual_count / len(triples), 2) if triples else 0,
             "source_grounded_triples": source_grounded,
-            "source_grounded_percentage": round(100 * source_grounded / len(triples), 2) if triples else 0,
+            "source_grounded_overall_percentage": round(100 * source_grounded / len(triples), 2) if triples else 0,
+            "explicit_grounding_accuracy": round(100 * source_grounded / explicit_count, 2) if explicit_count > 0 else 0,
         },
         "graph_structure": {
             "total_nodes": num_nodes,
@@ -503,7 +504,7 @@ def main():
     print(f"✓ Generated metadata: {metadata_path}")
     print(f"\nKey Analytics:")
     print(f"  • Total triples: {len(triples)} ({explicit_count} explicit, {contextual_count} contextual)")
-    print(f"  • Source grounded: {source_grounded}/{len(triples)} ({output_metadata['extraction_results']['source_grounded_percentage']}%)")
+    print(f"  • Explicit Grounding Accuracy: {source_grounded}/{explicit_count} ({output_metadata['extraction_results']['explicit_grounding_accuracy']}%)")
     print(f"  • Unique entities: {total_entities} ({entities_in_text} in text, {entities_inferred} inferred)")
     print(f"  • Graph nodes: {num_nodes}, edges: {num_edges}")
     print(f"  • Connected components: {num_components}")
@@ -555,7 +556,7 @@ def main():
     if create_graph_viz:
         print(f"  - Graph HTML: {output_dir / 'graph_viz' / f'{record_id}.html'}")
     print(f"\nTraceability Summary:")
-    print(f"  ✓ Source Grounding: {source_grounded}/{len(triples)} triples with char positions")
+    print(f"  ✓ Explicit Grounding Accuracy: {source_grounded}/{explicit_count} triples with char positions")
     print(f"  ✓ Iteration Tracking: {initial_count} initial + {bridging_count} bridging triples")
     print(f"  ✓ Few-shot Examples: {len(examples)} examples saved")
     print(f"  ✓ Long Doc Optimization: passes={extraction_passes}, workers={max_workers}")

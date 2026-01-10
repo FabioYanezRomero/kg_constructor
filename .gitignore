@@ -8,3 +8,4 @@ processed_test/
 visualizations/
 __pycache__
 .env
+*_log_*

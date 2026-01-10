@@ -67,7 +67,7 @@ class LMStudioLanguageModel(OpenAILanguageModel):
             # System message for JSON output (without using response_format API param)
             system_message = (
                 "You are a helpful assistant that extracts information into structured JSON. "
-                "Follow the format shown in the examples precisely. "
+                "Follow the provided format Exactly, matching the field names and structure of the examples. "
                 "Do not include any preamble or extra explanations."
             )
 
@@ -224,9 +224,24 @@ class LMStudioClient(BaseLLMClient):
             triples = []
             if hasattr(result, 'extractions') and result.extractions:
                 for extraction in result.extractions:
-                    if extraction.attributes:
-                        # Start with attributes (contains head, relation, tail, interpretation/inference)
-                        triple = dict(extraction.attributes)
+                    # Robust attribute extraction (handles both wrapped and flat formats)
+                    attrs = extraction.attributes
+                    
+                    # If attributes is None, it might be a flat dict in extraction_text or data
+                    if attrs is None:
+                        # Some versions of langextract might put the dict in extraction_text if it's flat
+                        if isinstance(extraction.extraction_text, str):
+                            try:
+                                import json
+                                text_trimmed = extraction.extraction_text.strip()
+                                if text_trimmed.startswith('{') and text_trimmed.endswith('}'):
+                                    attrs = json.loads(text_trimmed)
+                            except:
+                                pass
+                    
+                    if attrs:
+                        # Ensure it's a dict
+                        triple = dict(attrs)
                         
                         # Add source grounding information from langextract
                         if extraction.char_interval:
@@ -235,12 +250,14 @@ class LMStudioClient(BaseLLMClient):
                         else:
                             triple["char_start"] = None
                             triple["char_end"] = None
-
-                        # Add extraction metadata
-                        triple["extraction_text"] = extraction.extraction_text
-                        triple["extraction_class"] = extraction.extraction_class
                         
-                        triples.append(triple)
+                        # Add extraction metadata
+                        triple["extraction_text"] = str(extraction.extraction_text)
+                        triple["extraction_class"] = str(extraction.extraction_class)
+                        
+                        # Basic validation: must have head, relation, tail
+                        if all(k in triple for k in ('head', 'relation', 'tail')):
+                            triples.append(triple)
 
             return triples
 
@@ -300,7 +317,7 @@ IMPORTANT: Respond with ONLY a valid JSON array. No markdown code blocks, no exp
                 "messages": [
                     {"role": "user", "content": full_prompt}
                 ],
-                "temperature": temperature if temperature is not None else 0.1,
+                "temperature": temperature if temperature is not None else 0.0,
             }
             if max_tokens:
                 payload["max_tokens"] = max_tokens
@@ -342,15 +359,25 @@ IMPORTANT: Respond with ONLY a valid JSON array. No markdown code blocks, no exp
             try:
                 data = json.loads(response_text)
                 if isinstance(data, list):
-                    return data
+                    items = data
                 elif isinstance(data, dict):
                     # Some models might return {"items": [...]} or {"triples": [...]}
+                    items = []
                     for key in ["items", "triples", "data", "results", "extractions"]:
                         if key in data and isinstance(data[key], list):
-                            return data[key]
-                    # Return as single-item list
-                    return [data]
-                return []
+                            items = data[key]
+                            break
+                    if not items:
+                        items = [data]
+                else:
+                    return []
+
+                # Force inference to contextual for bridging (consistency across providers)
+                for item in items:
+                    if isinstance(item, dict):
+                        item['inference'] = 'contextual'
+                
+                return items
             except json.JSONDecodeError as e:
                 raise LLMClientError(f"Failed to parse JSON response: {e}\nResponse text: {response_text[:500]}")
 
