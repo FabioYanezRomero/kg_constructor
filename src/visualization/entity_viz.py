@@ -9,6 +9,9 @@ import langextract as lx
 from langextract import data
 
 
+from ..domains import Triple, InferenceType
+
+
 class EntityVisualizer:
     """Creates interactive HTML visualizations of extracted entities.
 
@@ -42,22 +45,9 @@ class EntityVisualizer:
         extraction_index: int,
         relation: str | None = None,
         role: str | None = None,
-        inference: str | None = None
+        inference: InferenceType | str | None = None
     ) -> data.Extraction | None:
-        """Create an Extraction object for an entity.
-
-        Args:
-            entity_text: The entity text to highlight
-            entity_type: Type of entity (e.g., 'head', 'tail', 'person', 'organization')
-            text: The full text to search in
-            extraction_index: Index of this extraction
-            relation: The relation this entity participates in
-            role: Role of entity in relation ('head' or 'tail')
-            inference: Inference type ('explicit' or 'contextual')
-
-        Returns:
-            Extraction object or None if entity not found in text
-        """
+        """Create an Extraction object for an entity."""
         # Find the entity in the text (case-sensitive)
         start_pos = text.find(entity_text)
 
@@ -71,25 +61,26 @@ class EntityVisualizer:
                 return None
 
         end_pos = start_pos + len(entity_text)
-
-        # Create CharInterval for the entity span (use start_pos, end_pos not start, end)
         char_interval = data.CharInterval(start_pos=start_pos, end_pos=end_pos)
 
-        # Build attributes dict with relation info
+        # Build attributes dict
         attributes = {}
         if relation:
             attributes["relation"] = relation
         if role:
             attributes["role"] = role
         if inference:
-            attributes["inference"] = inference
+            attributes["inference"] = str(inference)
 
-        # Build description with relation info
+        # Build description
         description_parts = []
         if role and relation:
             description_parts.append(f"{role.capitalize()} of relation: '{relation}'")
-        if inference:
-            description_parts.append(f"Inference: {inference}")
+        
+        inf_str = str(inference) if inference else ""
+        if inf_str:
+            description_parts.append(f"Inference: {inf_str}")
+            
         description = " | ".join(description_parts) if description_parts else None
 
         return data.Extraction(
@@ -104,7 +95,7 @@ class EntityVisualizer:
     def visualize_triples(
         self,
         text: str,
-        triples: list[dict[str, Any]],
+        triples: list[Triple] | list[dict[str, Any]],
         document_id: str | None = None,
         group_by: str = "entity_type"  # "entity_type" or "relation"
     ) -> str:
@@ -112,7 +103,7 @@ class EntityVisualizer:
 
         Args:
             text: The original text that was analyzed
-            triples: List of extracted triples (dicts with head, relation, tail)
+            triples: List of extracted triples (Triples or dicts)
             document_id: Optional identifier for this document
             group_by: How to group entities - "entity_type" or "relation"
 
@@ -122,67 +113,73 @@ class EntityVisualizer:
         if not text or not triples:
             return "<p>No text or triples to visualize</p>"
 
+        # Convert to Triple objects if needed
+        validated_triples: list[Triple] = []
+        for t in triples:
+            if isinstance(t, Triple):
+                validated_triples.append(t)
+            else:
+                try:
+                    validated_triples.append(Triple(**t))
+                except Exception:
+                    continue
+
         extractions = []
         extraction_index = 0
-        seen_entities = set()  # Track seen entities to avoid duplicates
+        seen_entities = set()
 
-        for triple in triples:
-            head = triple.get("head", "")
-            tail = triple.get("tail", "")
-            relation = triple.get("relation", "")
-            inference = triple.get("inference", "")
-
-            # Determine entity types based on grouping strategy
+        for t in validated_triples:
+            # Determine entity types
             if group_by == "relation":
-                head_type = f"{relation} (source)"
-                tail_type = f"{relation} (target)"
+                head_type = f"{t.relation} (source)"
+                tail_type = f"{t.relation} (target)"
             else:
-                head_type = "Head Entity"
-                tail_type = "Tail Entity"
+                # Distinguish augmented triples in the class name for CSS styling
+                suffix = " (Augmented)" if t.inference == InferenceType.CONTEXTUAL else ""
+                head_type = f"Head Entity{suffix}"
+                tail_type = f"Tail Entity{suffix}"
 
-            # Extract head entity (avoid duplicates)
-            if head and head not in seen_entities:
+            # Extract head
+            if t.head and t.head not in seen_entities:
                 extraction = self._create_extraction(
-                    entity_text=head,
+                    entity_text=t.head,
                     entity_type=head_type,
                     text=text,
                     extraction_index=extraction_index,
-                    relation=relation,
+                    relation=t.relation,
                     role="head",
-                    inference=inference
+                    inference=t.inference
                 )
                 if extraction:
                     extractions.append(extraction)
                     extraction_index += 1
-                    seen_entities.add(head)
+                    seen_entities.add(t.head)
 
-            # Extract tail entity (avoid duplicates)
-            if tail and tail not in seen_entities:
+            # Extract tail
+            if t.tail and t.tail not in seen_entities:
                 extraction = self._create_extraction(
-                    entity_text=tail,
+                    entity_text=t.tail,
                     entity_type=tail_type,
                     text=text,
                     extraction_index=extraction_index,
-                    relation=relation,
+                    relation=t.relation,
                     role="tail",
-                    inference=inference
+                    inference=t.inference
                 )
                 if extraction:
                     extractions.append(extraction)
                     extraction_index += 1
-                    seen_entities.add(tail)
+                    seen_entities.add(t.tail)
 
         if not extractions:
             return "<p>No entities found in the text</p>"
 
-        # Create AnnotatedDocument
         annotated_doc = data.AnnotatedDocument(
             text=text,
             extractions=extractions,
             document_id=document_id
         )
 
-        # Generate visualization using langextract
         html = lx.visualize(
             annotated_doc,
             animation_speed=self.animation_speed,
@@ -190,34 +187,19 @@ class EntityVisualizer:
             gif_optimized=self.gif_optimized
         )
 
-        # Convert to string if it's an IPython HTML object
         if hasattr(html, '_repr_html_'):
             html = html._repr_html_()
-        elif not isinstance(html, str):
-            html = str(html)
-
-        return html
+        return str(html)
 
     def save_visualization(
         self,
         text: str,
-        triples: list[dict[str, Any]],
+        triples: list[Triple] | list[dict[str, Any]],
         output_path: Path | str,
         document_id: str | None = None,
         group_by: str = "entity_type"
     ) -> Path:
-        """Create and save HTML visualization to file.
-
-        Args:
-            text: The original text that was analyzed
-            triples: List of extracted triples
-            output_path: Path to save HTML file
-            document_id: Optional identifier for this document
-            group_by: How to group entities - "entity_type" or "relation"
-
-        Returns:
-            Path to saved HTML file
-        """
+        """Create and save HTML visualization to file."""
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -228,55 +210,121 @@ class EntityVisualizer:
             group_by=group_by
         )
 
-        # Wrap in a complete HTML document
+        # Wrap in a premium HTML document
         full_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Entity Visualization{f' - {document_id}' if document_id else ''}</title>
+    <title>KG Visualization - {document_id or 'Untitled'}</title>
     <style>
+        :root {{
+            --bg-color: #f8fafc;
+            --card-bg: rgba(255, 255, 255, 0.8);
+            --text-color: #1e293b;
+            --muted-text: #64748b;
+            --accent-color: #3b82f6;
+            --glass-border: rgba(255, 255, 255, 0.3);
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }}
+
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --bg-color: #0f172a;
+                --card-bg: rgba(30, 41, 59, 0.7);
+                --text-color: #f1f5f9;
+                --muted-text: #94a3b8;
+                --glass-border: rgba(255, 255, 255, 0.1);
+                --shadow: 0 10px 15px -3px rgb(0 0 0 / 0.5);
+            }}
+        }}
+
         body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            max-width: 1200px;
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.5;
+            margin: 0;
+            padding: 40px 20px;
+            transition: background-color 0.3s ease;
+        }}
+
+        .container {{
+            max-width: 1000px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
         }}
+
         .header {{
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            padding: 32px;
+            border-radius: 16px;
+            margin-bottom: 32px;
+            box-shadow: var(--shadow);
         }}
+
         .header h1 {{
-            margin: 0 0 10px 0;
-            color: #333;
+            margin: 0 0 16px 0;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.025em;
         }}
-        .header .stats {{
-            color: #666;
+
+        .stats {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
             font-size: 14px;
+            color: var(--muted-text);
         }}
+
+        .stat-item b {{
+            color: var(--text-color);
+            display: block;
+            font-size: 18px;
+        }}
+
         .content {{
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+        }}
+
+        /* Style for augmented highlights if possible through langextract CSS injection or override */
+        mark[data-extraction-class*="Augmented"] {{
+            border: 1px dashed currentColor;
+            opacity: 0.9;
         }}
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Knowledge Graph Entity Visualization</h1>
-        <div class="stats">
-            <strong>Document:</strong> {document_id or 'Untitled'}<br>
-            <strong>Entities:</strong> {len(set(t.get('head', '') for t in triples) | set(t.get('tail', '') for t in triples))}<br>
-            <strong>Relations:</strong> {len(triples)}
+    <div class="container">
+        <div class="header">
+            <h1>Knowledge Graph Extraction</h1>
+            <div class="stats">
+                <div class="stat-item">
+                    ID
+                    <b>{document_id or 'N/A'}</b>
+                </div>
+                <div class="stat-item">
+                    Entities
+                    <b>{len(set(getattr(t, 'head', t.get('head', '')) for t in triples) | set(getattr(t, 'tail', t.get('tail', '')) for t in triples))}</b>
+                </div>
+                <div class="stat-item">
+                    Triples
+                    <b>{len(triples)}</b>
+                </div>
+            </div>
         </div>
-    </div>
-    <div class="content">
-        {html}
+        <div class="content">
+            {html}
+        </div>
     </div>
 </body>
 </html>"""
@@ -286,20 +334,11 @@ class EntityVisualizer:
 
     def batch_visualize(
         self,
-        records: dict[str, tuple[str, list[dict[str, Any]]]],
+        records: dict[str, tuple[str, list[Triple] | list[dict[str, Any]]]],
         output_dir: Path | str,
         group_by: str = "entity_type"
     ) -> list[Path]:
-        """Create visualizations for multiple records.
-
-        Args:
-            records: Dict mapping record_id to (text, triples) tuples
-            output_dir: Directory to save HTML files
-            group_by: How to group entities - "entity_type" or "relation"
-
-        Returns:
-            List of paths to created HTML files
-        """
+        """Create visualizations for multiple records."""
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -316,7 +355,6 @@ class EntityVisualizer:
                     group_by=group_by
                 )
                 created_files.append(output_path)
-                print(f"Created visualization: {output_path}")
             except Exception as e:
                 print(f"Error creating visualization for {record_id}: {e}")
 

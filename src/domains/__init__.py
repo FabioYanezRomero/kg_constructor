@@ -16,7 +16,7 @@ Usage:
 """
 
 from .base import KnowledgeDomain, DomainComponent, DomainLike, DomainResourceError
-from .models import DomainExamples, ExtractionMode, Triple, Extraction, ExtractionExample, AugmentationExample, DomainSchema
+from .models import DomainExamples, ExtractionMode, Triple, Extraction, ExtractionExample, AugmentationExample, DomainSchema, InferenceType
 from .registry import domain, get_domain, register_domain, list_available_domains
 
 # Import domains to trigger registration
@@ -37,6 +37,7 @@ __all__ = [
     "Extraction",
     "ExtractionExample",
     "AugmentationExample",
+    "InferenceType",
     # Registry
     "domain",
     "get_domain",

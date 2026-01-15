@@ -148,7 +148,7 @@ def extract(
             )
             
             with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(triples, f, ensure_ascii=False, indent=2)
+                json.dump([t.model_dump() for t in triples], f, ensure_ascii=False, indent=2)
             
             output_files[record_id] = output_path
             console.print(f"  → {len(triples)} triples saved")
@@ -234,9 +234,11 @@ def augment_connectivity(
             )
             
             with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(triples, f, ensure_ascii=False, indent=2)
+                json.dump([t.model_dump() for t in triples], f, ensure_ascii=False, indent=2)
             
             output_files[record_id] = output_path
+            if metadata.get("partial_result"):
+                console.print(f"  [yellow]⚠ Partial result saved due to iteration failure.[/yellow]")
             console.print(f"  → {len(triples)} triples saved (Final components: {metadata['final_components']})")
         
         console.print(f"\n[bold green]✓ Augmentation complete.[/bold green]")
@@ -293,21 +295,23 @@ def convert(
 def visualize(
     input_dir: Path = typer.Option(..., "--input", "-i", help="Directory with GraphML files", exists=True),
     output_dir: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for HTML"),
+    dark_mode: bool = typer.Option(False, "--dark-mode", help="Enable premium dark mode theme"),
+    layout: str = typer.Option("spring", "--layout", help="Graph layout (spring, circular, kamada_kawai, shell)"),
 ):
     """Create interactive HTML visualizations from GraphML.
     
     \b
     Examples:
-        python -m src.extract_cli visualize --input outputs/graphml
+        python -m src.extract_cli visualize --input outputs/graphml --dark-mode --layout kamada_kawai
     """
     console.print(f"[bold blue]Creating Visualizations[/bold blue]")
     
     viz_dir = output_dir or input_dir.parent / "visualizations"
     
     try:
-        html_files = batch_visualize_graphs(input_dir, viz_dir)
+        html_files = batch_visualize_graphs(input_dir, viz_dir, dark_mode=dark_mode, layout=layout)
         console.print(f"\n[bold green]✓ Created {len(html_files)} visualizations[/bold green]")
-        console.print(f"Output: {viz_dir}")
+        console.print(f"Output: {viz_dir} (Theme: {'Dark' if dark_mode else 'Light'}, Layout: {layout})")
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(code=1)

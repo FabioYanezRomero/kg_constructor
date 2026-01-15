@@ -22,22 +22,26 @@ def _prepare_prompt(prompt_template: str, record: dict[str, Any]) -> str:
 
 def _create_examples(domain: KnowledgeDomain) -> list[lx.data.ExampleData]:
     """Create few-shot examples for langextract extraction."""
-    raw_examples = domain.get_extraction_examples()
+    raw_examples = domain.extraction.examples
     return [lx.data.ExampleData(**ex) for ex in raw_examples]
 
 
-def _normalize_triple(raw_triple: dict[str, Any]) -> dict[str, Any]:
+def _normalize_triple(raw_triple: dict[str, Any]) -> Triple | None:
     """Normalize a raw extraction to standard Triple format."""
-    return {
-        "head": raw_triple.get("head", ""),
-        "relation": raw_triple.get("relation", ""),
-        "tail": raw_triple.get("tail", ""),
-        "inference": raw_triple.get("inference", "explicit"),
-        "justification": raw_triple.get("justification"),
-        "char_start": raw_triple.get("char_start"),
-        "char_end": raw_triple.get("char_end"),
-        "extraction_text": raw_triple.get("extraction_text"),
-    }
+    try:
+        # Grounding info doesn't fit in the current Triple model, 
+        # but we can filter for the fields Triple expects.
+        return Triple(
+            head=raw_triple.get("head", ""),
+            relation=raw_triple.get("relation", ""),
+            tail=raw_triple.get("tail", ""),
+            inference=raw_triple.get("inference", "explicit"),
+            justification=raw_triple.get("justification")
+        )
+    except Exception as e:
+        # Log and skip invalid triples
+        print(f"Warning: Skipping invalid triple: {e}")
+        return None
 
 
 def extract_from_text(
@@ -48,7 +52,7 @@ def extract_from_text(
     temperature: float = 0.0,
     max_tokens: int | None = None,
     prompt_override: str | None = None
-) -> list[dict[str, Any]]:
+) -> list[Triple]:
     """Extract triples from a single text.
 
     Args:
@@ -61,7 +65,7 @@ def extract_from_text(
         prompt_override: Optional prompt template override
 
     Returns:
-        List of extracted triple dictionaries
+        List of extracted Triple objects
     """
     record = {"text": text}
     if record_id:
@@ -80,4 +84,10 @@ def extract_from_text(
         max_tokens=max_tokens
     )
 
-    return [_normalize_triple(t) for t in raw_triples]
+    triples = []
+    for t in raw_triples:
+        normalized = _normalize_triple(t)
+        if normalized:
+            triples.append(normalized)
+    
+    return triples
