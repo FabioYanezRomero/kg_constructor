@@ -28,9 +28,10 @@ class ExtractionPipeline:
         client_config: ClientConfig | None = None,
         domain: KnowledgeDomain | str | None = None,
         extraction_mode: str = "open",
+        augmentation_strategy: str = "connectivity",
         # Overrides
         prompt_path: Path | str | None = None,
-        bridging_prompt_path: Path | str | None = None,
+        augmentation_prompt_path: Path | str | None = None,
         enable_entity_viz: bool = True
     ) -> None:
         """Initialize the pipeline.
@@ -41,12 +42,16 @@ class ExtractionPipeline:
             client_config: Configuration for creating a client
             domain: KnowledgeDomain instance or domain name
             extraction_mode: 'open' or 'constrained'
+            augmentation_strategy: Augmentation strategy (default: 'connectivity')
             prompt_path: Optional override for extraction prompt file
-            bridging_prompt_path: Optional override for bridging prompt file
+            augmentation_prompt_path: Optional override for augmentation prompt file
             enable_entity_viz: Whether to create entity highlighting visualizations
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Store strategy for reference
+        self.augmentation_strategy = augmentation_strategy
 
         # Initialize extractor with client
         self.extractor = KnowledgeGraphExtractor(
@@ -54,8 +59,9 @@ class ExtractionPipeline:
             client_config=client_config,
             domain=domain,
             extraction_mode=extraction_mode,
+            augmentation_strategy=augmentation_strategy,
             prompt_path=prompt_path,
-            bridging_prompt_path=bridging_prompt_path
+            augmentation_prompt_path=augmentation_prompt_path
         )
 
         # Initialize entity visualizer
@@ -69,7 +75,11 @@ class ExtractionPipeline:
         limit: int | None = None,
         output_subdir: str = "json",
         temperature: float = 0.0,
-        save_texts: bool = True
+        save_texts: bool = True,
+        run_extraction: bool = True,
+        run_augmentation: bool = True,
+        max_disconnected: int = 3,
+        max_iterations: int = 2,
     ) -> dict[str, Any]:
         """Process a CSV file and save triples as JSON files.
 
@@ -101,24 +111,47 @@ class ExtractionPipeline:
         if limit:
             df = df.head(limit)
 
-        # Extract triples from all records
-        results = self.extractor.extract_from_csv(
-            csv_path=csv_path,
-            text_column=text_column,
-            id_column=id_column,
-            limit=limit,
-            temperature=temperature
-        )
-
-        # Save results
         save_dir = self.output_dir / output_subdir
         save_dir.mkdir(parents=True, exist_ok=True)
 
         output_files = {}
+        all_metadata = {}
         texts_map = {} if save_texts else None
 
-        for record_id, triples in results.items():
+        for _, row in df.iterrows():
+            record_id = str(row[id_column])
+            text = str(row[text_column])
             output_path = save_dir / f"{record_id}.json"
+            
+            existing_triples = None
+            if not run_extraction:
+                if output_path.exists():
+                    print(f"Loading existing triples for {record_id} from {output_path}")
+                    with open(output_path, "r", encoding="utf-8") as f:
+                        existing_triples = json.load(f)
+                else:
+                    print(f"Extraction skipped, and no existing file found for {record_id} at {output_path}")
+                    continue
+            
+            if run_augmentation:
+                print(f"Running extraction + augmentation for {record_id}")
+                triples, metadata = self.extractor.extract_connected_graph(
+                    text=text,
+                    record_id=record_id,
+                    initial_triples=existing_triples,
+                    temperature=temperature,
+                    max_disconnected=max_disconnected,
+                    max_iterations=max_iterations
+                )
+                all_metadata[record_id] = metadata
+            elif run_extraction:
+                print(f"Running extraction for {record_id}")
+                triples = self.extractor.extract_from_text(text, record_id, temperature)
+            else:
+                # Both false? Should not happen with current CLI, but if so:
+                triples = existing_triples
+
+            # Save results
             with open(output_path, "w", encoding="utf-8") as f:
                 json.dump(triples, f, ensure_ascii=False, indent=2)
 
@@ -126,11 +159,7 @@ class ExtractionPipeline:
 
             # Store original text
             if save_texts:
-                # Find the row with this record_id
-                row = df[df[id_column].astype(str) == record_id]
-                if not row.empty:
-                    text = str(row.iloc[0][text_column])
-                    texts_map[record_id] = text
+                texts_map[record_id] = text
 
             print(f"Saved {len(triples)} triples for {record_id} to {output_path}")
 
@@ -298,7 +327,11 @@ class ExtractionPipeline:
         limit: int | None = None,
         create_graph_viz: bool = True,
         create_entity_viz: bool = True,
-        temperature: float = 0.0
+        temperature: float = 0.0,
+        run_extraction: bool = True,
+        run_augmentation: bool = True,
+        max_disconnected: int = 3,
+        max_iterations: int = 2
     ) -> dict[str, Any]:
         """Run the complete pipeline: extract, convert, visualize.
 
@@ -337,7 +370,11 @@ class ExtractionPipeline:
             limit=limit,
             output_subdir="extracted_json",
             temperature=temperature,
-            save_texts=create_entity_viz  # Only save texts if we need entity viz
+            save_texts=create_entity_viz,
+            run_extraction=run_extraction,
+            run_augmentation=run_augmentation,
+            max_disconnected=max_disconnected,
+            max_iterations=max_iterations
         )
 
         json_files = extraction_result['output_files']

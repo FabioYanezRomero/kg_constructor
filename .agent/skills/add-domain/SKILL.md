@@ -19,9 +19,11 @@ src/domains/<domain_name>/
 │   ├── prompt_constrained.txt # Type-constrained extraction prompt
 │   └── examples.json          # Few-shot extraction examples
 └── augmentation/
-    ├── prompt.txt             # Graph bridging/augmentation prompt
-    └── examples.json          # Few-shot augmentation examples
+    └── connectivity/          # Strategy folder (matches CLI: augment connectivity)
+        ├── prompt.txt
+        └── examples.json
 ```
+
 
 ## Step 1: Create the Resource Files
 
@@ -135,9 +137,22 @@ To improve performance with more examples:
 - **Validation**: The next time the domain is used, Pydantic will automatically validate your new examples. If you made a JSON syntax or schema error, you will get a clear error message.
 
 ### 3. Overriding at Runtime (via CLI)
-The Typer CLI (upcoming feature) will allow you to override these files without changing the codebase:
-- `--examples-file path/to/custom_examples.json`
-- `--prompt-file path/to/custom_prompt.txt`
+The Typer CLI uses composable subcommands:
+
+```bash
+# Step 1: Extract triples from text
+python -m src.extract_cli extract --csv data.csv --domain legal
+
+# Step 2: Augment with connectivity strategy
+python -m src.extract_cli augment connectivity --csv data.csv
+
+# Full pipeline = run both commands in sequence
+python -m src.extract_cli extract --csv data.csv --domain legal
+python -m src.extract_cli augment connectivity --csv data.csv --max-disconnected 1
+```
+
+Future augmentation strategies can be added as new subcommands under `augment`.
+
 
 
 ## Validation Guardrails

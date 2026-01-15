@@ -29,9 +29,10 @@ class KnowledgeGraphExtractor:
         client_config: ClientConfig | None = None,
         domain: KnowledgeDomain | str | None = None,
         extraction_mode: str = "open",
+        augmentation_strategy: str = "connectivity",
         # Keep for backward compatibility overrides
         prompt_path: Path | str | None = None,
-        bridging_prompt_path: Path | str | None = None,
+        augmentation_prompt_path: Path | str | None = None,
     ) -> None:
         """Initialize the extractor.
 
@@ -40,8 +41,9 @@ class KnowledgeGraphExtractor:
             client_config: Configuration for creating a client
             domain: KnowledgeDomain instance or domain name (e.g., 'legal', 'default').
             extraction_mode: 'open' or 'constrained' (default: 'open')
+            augmentation_strategy: Augmentation strategy name (default: 'connectivity')
             prompt_path: Optional override for extraction prompt file
-            bridging_prompt_path: Optional override for bridging prompt file
+            augmentation_prompt_path: Optional override for augmentation prompt file
 
         Raises:
             ValueError: If neither client nor client_config is provided
@@ -63,17 +65,24 @@ class KnowledgeGraphExtractor:
         else:
             self.domain = domain
 
-        # Final prompts and examples (handling overrides)
+        # Store strategy for later reference
+        self.augmentation_strategy = augmentation_strategy
+
+        # Load extraction prompt
         self.prompt_template = self.domain.extraction.prompt
         if prompt_path:
             self.prompt_template = Path(prompt_path).read_text(encoding="utf-8")
         
-        self.bridging_prompt_template = self.domain.augmentation.prompt
-        if bridging_prompt_path:
-            self.bridging_prompt_template = Path(bridging_prompt_path).read_text(encoding="utf-8")
+        # Load augmentation prompt from strategy-specific folder
+        augmentation_component = self.domain.get_augmentation(augmentation_strategy)
+        self.augmentation_prompt_template = augmentation_component.prompt
+        if augmentation_prompt_path:
+            self.augmentation_prompt_template = Path(augmentation_prompt_path).read_text(encoding="utf-8")
+        
+        # Store examples for the current augmentation strategy
+        self._augmentation_examples = augmentation_component.examples
         
         # Backward compatibility for example set
-        # (KnowledgeDomain implements the required methods)
         self._example_set = self.domain
 
     def _prepare_prompt(self, record: dict[str, Any]) -> str:
@@ -111,20 +120,10 @@ class KnowledgeGraphExtractor:
 
     def _get_extraction_prompt_description(self) -> str:
         """Get the prompt description for triple extraction.
-
-        Returns:
-            Detailed prompt description with Triple schema fields.
+        
+        The detailed field descriptions are handled by the Triple model itself.
         """
-        return """Extract knowledge graph triples (head, relation, tail) from the text.
-
-Each extraction should include these attributes:
-- head: The source entity in the relationship (person, organization, concept, etc.)
-- relation: The relationship type connecting head to tail (e.g., works_at, filed_against, is_type, represents, etc.)
-- tail: The target entity in the relationship
-- inference: Whether the triple is "explicit" (directly stated in text) or "contextual" (inferred for connectivity)
-- justification: Brief explanation for contextual triples (optional for explicit)
-
-Focus on extracting meaningful relationships between entities. Use exact entity names from the text when possible."""
+        return "Extract meaningful knowledge graph triples from the text, focusing on explicit relationships between entities."
 
     def _normalize_triple(self, raw_triple: dict[str, Any]) -> dict[str, Any]:
         """Normalize a raw extraction to standard Triple format.
@@ -269,20 +268,22 @@ Focus on extracting meaningful relationships between entities. Use exact entity 
         self,
         text: str,
         record_id: str | None = None,
+        initial_triples: list[dict[str, Any]] | None = None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
         max_disconnected: int = 3,
         max_iterations: int = 2
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        """Extract triples with iterative connectivity improvement.
+        """Extract triples with iterative connectivity improvement (Augmentation).
 
-        This method performs a two-step extraction:
-        1. Initial extraction of explicit and contextual triples
-        2. Iterative refinement to reduce disconnected components
+        This method performs a two-step process:
+        1. Extraction: (Optional) Initial extraction of explicit and contextual triples
+        2. Augmentation: Iterative refinement to reduce disconnected components
 
         Args:
             text: The text to analyze
             record_id: Optional identifier for logging
+            initial_triples: Optional list of already extracted triples to augment
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
             max_disconnected: Maximum acceptable disconnected components
@@ -291,25 +292,32 @@ Focus on extracting meaningful relationships between entities. Use exact entity 
         Returns:
             Tuple of (triples, metadata) where metadata includes:
                 - connectivity info
-                - bridging_triples: List of triples added during refinement
-                - Each triple has iteration_source field (0=initial, 1,2...=bridging)
+                - augmentation_triples: List of triples added during refinement
+                - Each triple has iteration_source field (0=initial, 1,2...=augmentation)
         """
         import networkx as nx
 
-        # Step 1: Initial extraction
-        triples = self.extract_from_text(text, record_id, temperature, max_tokens)
-        
-        # Mark initial triples with iteration_source = 0
-        for triple in triples:
-            triple["iteration_source"] = 0
+        if initial_triples is not None:
+            triples = [dict(t) for t in initial_triples]
+            # Ensure they have iteration_source if missing
+            for triple in triples:
+                if "iteration_source" not in triple:
+                    triple["iteration_source"] = 0
+        else:
+            # Step 1: Initial extraction
+            triples = self.extract_from_text(text, record_id, temperature, max_tokens)
+            
+            # Mark initial triples with iteration_source = 0
+            for triple in triples:
+                triple["iteration_source"] = 0
 
         # Build graph and analyze connectivity
         G = self._build_graph_from_triples(triples)
         components = list(nx.weakly_connected_components(G))
         num_components = len(components)
 
-        # Track all bridging triples for separate output
-        all_bridging_triples: list[dict[str, Any]] = []
+        # Track all augmentation triples for separate output
+        all_augmentation_triples: list[dict[str, Any]] = []
 
         metadata = {
             "initial_extraction": {
@@ -319,7 +327,7 @@ Focus on extracting meaningful relationships between entities. Use exact entity 
                 "disconnected_components": num_components,
             },
             "refinement_iterations": [],
-            "bridging_triples": [],  # Will be populated with all bridging triples
+            "augmentation_triples": [],  # Will be populated with all augmentation triples
         }
 
         # Step 2: Iterative refinement if needed
@@ -328,10 +336,10 @@ Focus on extracting meaningful relationships between entities. Use exact entity 
             # Format component information for the prompt
             component_info = self._format_components(components, G)
 
-            # Create bridging prompt (use template if available, otherwise hardcoded)
-            if self.bridging_prompt_template:
+            # Create augmentation prompt (use template if available, otherwise hardcoded)
+            if self.augmentation_prompt_template:
                 # Use custom template with variable substitution
-                bridging_prompt = self.bridging_prompt_template.replace(
+                augmentation_prompt = self.augmentation_prompt_template.replace(
                     "{num_components}", str(num_components)
                 ).replace(
                     "{component_info}", component_info
@@ -340,7 +348,7 @@ Focus on extracting meaningful relationships between entities. Use exact entity 
                 )
             else:
                 # Use hardcoded default prompt
-                bridging_prompt = f"""
+                augmentation_prompt = f"""
 The previously extracted knowledge graph has {num_components} disconnected components.
 
 Disconnected Components:
@@ -356,22 +364,22 @@ or infer MINIMAL contextual triples necessary for connectivity. Focus on:
 3. Temporal or causal connections
 4. Hierarchical relationships (part-of, type-of)
 
-Extract ONLY the bridging triples needed to connect components.
+Extract ONLY the augmentation triples needed to connect components.
 Do not re-extract existing triples.
 """
 
-            # Extract bridging triples using unconstrained generation
+            # Extract augmentation triples using unconstrained generation
             # (bypasses langextract source grounding to allow for better inference)
-            bridging_triples = self.client.generate_json(
-                text=bridging_prompt,
-                prompt_description="Extract bridging triples to connect graph components. Infer relations if necessary.",
+            augmentation_triples = self.client.generate_json(
+                text=augmentation_prompt,
+                prompt_description="Extract augmentation triples to connect graph components. Infer relations if necessary.",
                 format_type=Triple,
                 temperature=temperature,
                 max_tokens=max_tokens
             )
 
-            # Normalize bridging triples
-            bridging_triples = [self._normalize_triple(t) for t in bridging_triples]
+            # Normalize augmentation triples
+            augmentation_triples = [self._normalize_triple(t) for t in augmentation_triples]
 
             # Filter out duplicates
             existing_triples_set = {
@@ -379,7 +387,7 @@ Do not re-extract existing triples.
                 for t in triples
             }
             new_triples = [
-                t for t in bridging_triples
+                t for t in augmentation_triples
                 if (t['head'], t['relation'], t['tail']) not in existing_triples_set
             ]
 
@@ -399,9 +407,9 @@ Do not re-extract existing triples.
                 })
                 break
 
-            # Add to triples and track bridging triples separately
+            # Add to triples and track augmentation triples separately
             triples.extend(new_triples)
-            all_bridging_triples.extend(new_triples)
+            all_augmentation_triples.extend(new_triples)
             
             G = self._build_graph_from_triples(triples)
             components = list(nx.weakly_connected_components(G))
@@ -434,14 +442,14 @@ Do not re-extract existing triples.
         elif metadata["refinement_iterations"] and "early_stop_reason" in metadata["refinement_iterations"][-1]:
             stop_reason = metadata["refinement_iterations"][-1]["early_stop_reason"]
 
-        # Store bridging triples in metadata
-        metadata["bridging_triples"] = all_bridging_triples
+        # Store augmentation triples in metadata
+        metadata["augmentation_triples"] = all_augmentation_triples
 
         # Final metadata
         metadata["final_state"] = {
             "total_triples": len(triples),
             "initial_triples": metadata["initial_extraction"]["triples"],
-            "bridging_triples": len(all_bridging_triples),
+            "augmentation_triples": len(all_augmentation_triples),
             "nodes": G.number_of_nodes(),
             "edges": G.number_of_edges(),
             "disconnected_components": num_components,
