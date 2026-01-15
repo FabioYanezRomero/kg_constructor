@@ -9,8 +9,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from kg_constructor.clients import ClientConfig
-from kg_constructor.extraction_pipeline import ExtractionPipeline
+from .clients import ClientConfig
+from .extraction_pipeline import ExtractionPipeline
 
 
 def main() -> None:

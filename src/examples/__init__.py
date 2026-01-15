@@ -4,7 +4,7 @@ This module provides domain-specific examples for knowledge graph extraction.
 Examples guide the LLM's extraction behavior by demonstrating expected output format.
 
 Usage:
-    from kg_constructor.examples import get_examples, LegalExamples, DefaultExamples
+    from examples import get_examples, LegalExamples, DefaultExamples
     
     # Get examples by domain name
     examples = get_examples("legal")
@@ -15,9 +15,9 @@ Usage:
 
 from __future__ import annotations
 
-from kg_constructor.examples.base import ExampleSet
-from kg_constructor.examples.default import DefaultExamples
-from kg_constructor.examples.domains.legal import LegalExamples
+from .base import ExampleSet
+from .default import DefaultExamples
+from .domains.legal import LegalExamples
 
 # Registry of available example sets
 _EXAMPLE_REGISTRY: dict[str, type[ExampleSet]] = {

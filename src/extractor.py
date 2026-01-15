@@ -9,8 +9,8 @@ from typing import Any, Literal
 import langextract as lx
 from pydantic import BaseModel, Field
 
-from kg_constructor.clients import BaseLLMClient, ClientConfig, create_client
-from kg_constructor.examples import ExampleSet, get_examples
+from .clients import BaseLLMClient, ClientConfig, create_client
+from .examples import ExampleSet, get_examples
 
 
 class Triple(BaseModel):

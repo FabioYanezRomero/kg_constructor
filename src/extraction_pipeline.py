@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from kg_constructor.clients import BaseLLMClient, ClientConfig, create_client
-from kg_constructor.extractor import KnowledgeGraphExtractor
-from kg_constructor.visualizer import EntityVisualizer
+from .clients import BaseLLMClient, ClientConfig, create_client
+from .extractor import KnowledgeGraphExtractor
+from .visualizer import EntityVisualizer
 
 
 class ExtractionPipeline:

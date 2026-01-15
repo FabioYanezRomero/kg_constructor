@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import langextract as lx
 
-from kg_constructor.examples.base import ExampleSet
+from ...base import ExampleSet
 
 
 class LegalExamples(ExampleSet):
