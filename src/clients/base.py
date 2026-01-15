@@ -89,5 +89,27 @@ class BaseLLMClient(ABC):
         """
         pass
 
+    @classmethod
+    @abstractmethod
+    def from_config(cls, config: "ClientConfig") -> "BaseLLMClient":
+        """Create a client instance from a ClientConfig.
+
+        Each client subclass must implement this method to handle its
+        specific configuration parameters.
+
+        Args:
+            config: ClientConfig instance with client parameters
+
+        Returns:
+            Configured client instance
+        """
+        pass
+
+
+# Forward reference for type hints
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .config import ClientConfig
+
 
 __all__ = ["BaseLLMClient", "LLMClientError"]

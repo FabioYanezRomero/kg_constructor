@@ -9,7 +9,7 @@ from typing import Any, Literal
 import langextract as lx
 from pydantic import BaseModel, Field
 
-from .clients import BaseLLMClient, ClientConfig, create_client
+from .clients import BaseLLMClient, ClientConfig, ClientFactory
 from .examples import ExampleSet, get_examples
 
 
@@ -60,10 +60,10 @@ class KnowledgeGraphExtractor:
         if client is not None:
             self.client = client
         elif client_config is not None:
-            self.client = create_client(client_config)
+            self.client = ClientFactory.create(client_config)
         else:
             # Default to Gemini
-            self.client = create_client(ClientConfig(client_type="gemini"))
+            self.client = ClientFactory.create(ClientConfig(client_type="gemini"))
 
         # Set up examples
         if examples is None:

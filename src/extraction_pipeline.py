@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .clients import BaseLLMClient, ClientConfig, create_client
+from .clients import BaseLLMClient, ClientConfig, ClientFactory
 from .extractor import KnowledgeGraphExtractor
 from .visualizer import EntityVisualizer
 

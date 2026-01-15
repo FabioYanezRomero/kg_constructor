@@ -10,7 +10,7 @@ __all__ = [
     "ExtractionPipeline",
     "EntityVisualizer",
     "ClientConfig",
-    "create_client",
+    "ClientFactory",
     # Client types
     "GeminiClient",
     "OllamaClient",
@@ -44,9 +44,9 @@ def ClientConfig(*args: Any, **kwargs: Any) -> Any:
     return _impl(*args, **kwargs)
 
 
-def create_client(*args: Any, **kwargs: Any) -> Any:
-    """Create an LLM client from configuration."""
-    from .clients import create_client as _impl
+def ClientFactory(*args: Any, **kwargs: Any) -> Any:
+    """Client factory class for creating LLM clients."""
+    from .clients import ClientFactory as _impl
 
     return _impl(*args, **kwargs)
 

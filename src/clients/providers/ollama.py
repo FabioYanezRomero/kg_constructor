@@ -1,11 +1,14 @@
 import dataclasses
-from typing import Any, Iterator, Sequence, Mapping
+from typing import TYPE_CHECKING, Any, Iterator, Sequence, Mapping
 import langextract as lx
 from langextract.providers.openai import OpenAILanguageModel
 from langextract.core import types as core_types
 from langextract.core import exceptions as lx_exceptions
 
-from .base import BaseLLMClient, LLMClientError
+from ..base import BaseLLMClient, LLMClientError
+
+if TYPE_CHECKING:
+    from ..config import ClientConfig
 
 
 @dataclasses.dataclass(init=False)
@@ -330,6 +333,28 @@ Respond with ONLY valid JSON, no additional text or markdown.
     def supports_structured_output(self) -> bool:
         """Ollama generally doesn't support native structured output."""
         return False
+
+    @classmethod
+    def from_config(cls, config: "ClientConfig") -> "OllamaClient":
+        """Create an OllamaClient from a ClientConfig.
+        
+        Applies Ollama-specific defaults for any unset values:
+        - model_id: "llama3.1"
+        - base_url: "http://localhost:11434"
+        - max_workers: 5 (lower for local models)
+        - batch_length: 5 (lower for local models)
+        """
+        return cls(
+            model_id=config.model_id or "llama3.1",
+            base_url=config.base_url or "http://localhost:11434",
+            max_workers=config.max_workers if config.max_workers is not None else 5,
+            batch_length=config.batch_length if config.batch_length is not None else 5,
+            max_char_buffer=config.max_char_buffer,
+            show_progress=config.show_progress,
+            timeout=config.timeout,
+        )
+
+
 
 
 __all__ = ["OllamaClient"]

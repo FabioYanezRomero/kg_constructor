@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import langextract as lx
 from langextract.providers.openai import OpenAILanguageModel
 from langextract.core import types as core_types
 from langextract.core import exceptions
 
-from .base import BaseLLMClient, LLMClientError
+from ..base import BaseLLMClient, LLMClientError
+
+if TYPE_CHECKING:
+    from ..config import ClientConfig
 
 
 @dataclasses.dataclass(init=False)
@@ -389,6 +392,30 @@ IMPORTANT: Respond with ONLY a valid JSON array. No markdown code blocks, no exp
     def supports_structured_output(self) -> bool:
         """LM Studio generally doesn't support native structured output."""
         return False
+
+    @classmethod
+    def from_config(cls, config: "ClientConfig") -> "LMStudioClient":
+        """Create an LMStudioClient from a ClientConfig.
+        
+        Applies LM Studio-specific defaults for any unset values:
+        - model_id: "local-model"
+        - base_url: "http://localhost:1234/v1"
+        - api_key: "lm-studio"
+        - max_workers: 5 (lower for local models)
+        - batch_length: 5 (lower for local models)
+        """
+        return cls(
+            model_id=config.model_id or "local-model",
+            base_url=config.base_url or "http://localhost:1234/v1",
+            api_key=config.api_key or "lm-studio",
+            max_workers=config.max_workers if config.max_workers is not None else 5,
+            batch_length=config.batch_length if config.batch_length is not None else 5,
+            max_char_buffer=config.max_char_buffer,
+            show_progress=config.show_progress,
+            timeout=config.timeout,
+        )
+
+
 
 
 __all__ = ["LMStudioClient"]

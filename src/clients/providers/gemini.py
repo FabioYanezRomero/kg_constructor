@@ -11,11 +11,14 @@ the langextract library for:
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import langextract as lx
 
-from .base import BaseLLMClient, LLMClientError
+from ..base import BaseLLMClient, LLMClientError
+
+if TYPE_CHECKING:
+    from ..config import ClientConfig
 
 
 class GeminiClient(BaseLLMClient):
@@ -289,6 +292,24 @@ Input Text:
     def supports_structured_output(self) -> bool:
         """Gemini supports structured output via langextract schema constraints."""
         return True
+
+    @classmethod
+    def from_config(cls, config: "ClientConfig") -> "GeminiClient":
+        """Create a GeminiClient from a ClientConfig.
+        
+        Applies Gemini-specific defaults for any unset values.
+        """
+        return cls(
+            model_id=config.model_id or "gemini-2.0-flash",
+            api_key=config.api_key,
+            max_workers=config.max_workers if config.max_workers is not None else 10,
+            max_char_buffer=config.max_char_buffer,
+            extraction_passes=config.extraction_passes,
+            show_progress=config.show_progress,
+            temperature=config.temperature,
+        )
+
+
 
 
 __all__ = ["GeminiClient"]
