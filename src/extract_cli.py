@@ -6,33 +6,40 @@ Supports JSONL (recommended), JSON, and CSV input formats.
 Commands:
     extract              - Step 1: Extract triples from text
     augment connectivity - Step 2: Reduce disconnected graph components
+    convert              - Convert JSON triples to GraphML
+    visualize            - Create interactive visualizations
 
-Full pipeline is achieved by running both commands in sequence:
+Full pipeline is achieved by running commands in sequence:
     python -m src.extract_cli extract --input data.jsonl --domain legal
     python -m src.extract_cli augment connectivity --input data.jsonl --domain legal
+    python -m src.extract_cli convert --input outputs/extracted_json
+    python -m src.extract_cli visualize --input outputs/graphml
 """
 
 from __future__ import annotations
 
+import json
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from .clients import ClientConfig
-from .extraction_pipeline import ExtractionPipeline
+from .clients import ClientConfig, ClientFactory
+from .datasets import load_records
+from .converters import convert_json_directory
+from .visualization import batch_visualize_graphs, EntityVisualizer
 from .domains import list_available_domains, ExtractionMode
 
 # Initialize Typer apps
 app = typer.Typer(
-    help="Knowledge graph generation CLI. Use 'extract' for Step 1, 'augment <strategy>' for Step 2.",
+    help="Knowledge graph generation CLI. Commands: extract, augment, convert, visualize",
     no_args_is_help=True
 )
 augment_app = typer.Typer(
-    help="Step 2: Augment the knowledge graph. Strategies: connectivity (default)",
+    help="Step 2: Augment the knowledge graph. Strategies: connectivity",
     no_args_is_help=True
 )
 app.add_typer(augment_app, name="augment")
@@ -75,92 +82,80 @@ def _build_client_config(
     return ClientConfig(**config_kwargs)
 
 
-def _init_pipeline(
-    output_dir: Path,
-    client_config: ClientConfig,
-    domain: str,
-    mode: ExtractionMode,
-    prompt_override: Optional[Path]
-) -> ExtractionPipeline:
-    """Initialize the extraction pipeline."""
-    return ExtractionPipeline(
-        output_dir=output_dir,
-        client_config=client_config,
-        domain=domain,
-        extraction_mode=mode,
-        prompt_path=prompt_override
-    )
-
-
 # =============================================================================
 # EXTRACT Command (Step 1)
 # =============================================================================
 
 @app.command()
 def extract(
-    input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file (.jsonl, .json, or .csv)", exists=True, file_okay=True, dir_okay=False),
-    output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory to save all outputs"),
-    domain: str = typer.Option(..., "--domain", "-d", help=f"Knowledge domain [required] (Available: {', '.join(list_available_domains())})"),
-    mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode (open or constrained)"),
+    input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file (.jsonl, .json, or .csv)", exists=True),
+    output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory to save outputs"),
+    domain: str = typer.Option(..., "--domain", "-d", help=f"Knowledge domain [required] ({', '.join(list_available_domains())})"),
+    mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
     client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c", help="LLM client type"),
-    model: Optional[str] = typer.Option(None, "--model", help="Model ID (e.g., gemini-2.0-flash-exp, llama3.1)"),
-    api_key: Optional[str] = typer.Option(None, "--api-key", help="API key for Gemini (optional if env var set)"),
+    model: Optional[str] = typer.Option(None, "--model", help="Model ID"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", help="API key for Gemini"),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL for Ollama/LM Studio"),
     text_field: str = typer.Option("text", "--text-field", help="Field name containing text"),
     id_field: str = typer.Option("id", "--id-field", help="Field name containing record IDs"),
-    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of records to process"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of records"),
     temperature: float = typer.Option(0.0, "--temp", help="Sampling temperature"),
-    prompt_override: Optional[Path] = typer.Option(None, "--prompt", help="Override extraction prompt file", exists=True),
+    prompt_override: Optional[Path] = typer.Option(None, "--prompt", help="Override extraction prompt", exists=True),
     no_progress: bool = typer.Option(False, "--no-progress", help="Hide progress bar"),
     max_workers: Optional[int] = typer.Option(None, "--workers", help="Max parallel workers"),
-    timeout: int = typer.Option(120, "--timeout", help="Request timeout (seconds) for local servers"),
+    timeout: int = typer.Option(120, "--timeout", help="Request timeout (seconds)"),
 ):
     """Step 1: Extract knowledge graph triples from text.
     
-    Supports JSONL (recommended), JSON, and CSV input formats.
-    Format is auto-detected from file extension.
-    
     \b
     Examples:
-        # Extract from JSONL (recommended)
         python -m src.extract_cli extract --input data.jsonl --domain legal
-        
-        # Extract from JSON array
-        python -m src.extract_cli extract --input data.json --domain legal
-        
-        # Extract from CSV (legacy)
-        python -m src.extract_cli extract --input data.csv --domain legal --text-field background
     """
     console.print(f"[bold blue]Step 1: Extraction[/bold blue]")
-    console.print(f"Input: [dim]{input_file}[/dim]")
-    console.print(f"Domain: [green]{domain}[/green] | Mode: [dim]{mode.value}[/dim]")
-    
-    client_config = _build_client_config(client, model, api_key, base_url, temperature, no_progress, max_workers, timeout)
+    console.print(f"Input: [dim]{input_file}[/dim] | Domain: [green]{domain}[/green]")
     
     try:
-        pipeline = _init_pipeline(output_dir, client_config, domain, mode, prompt_override)
-        results = pipeline.run_full_pipeline(
-            input_path=input_file,
-            text_field=text_field,
-            id_field=id_field,
-            limit=limit,
-            temperature=temperature,
-            run_extraction=True,
-            run_augmentation=False
-        )
+        # Load records
+        records = load_records(input_file, text_field, id_field, limit)
+        console.print(f"Loaded {len(records)} records")
         
-        console.print("\n[bold green]✓ Extraction complete.[/bold green]")
+        # Setup domain and client
+        from .domains import get_domain
+        domain_obj = get_domain(domain, extraction_mode=mode)
+        config = _build_client_config(client, model, api_key, base_url, temperature, no_progress, max_workers, timeout)
+        llm_client = ClientFactory.create(config)
         
-        table = Table(title="Extraction Summary")
-        table.add_column("Property", style="cyan")
-        table.add_column("Value", style="magenta")
-        table.add_row("Model", pipeline.extractor.client.get_model_name())
-        table.add_row("Domain", domain)
-        table.add_row("Records processed", str(len(results['json_files'])))
-        table.add_row("Output directory", str(output_dir))
-        console.print(table)
+        # Process
+        json_dir = output_dir / "extracted_json"
+        json_dir.mkdir(parents=True, exist_ok=True)
         
-        console.print(f"\n[dim]Next step: python -m src.extract_cli augment connectivity --input {input_file} --domain {domain}[/dim]")
+        from .builder import extract_from_text
+        
+        output_files = {}
+        for record in records:
+            record_id = str(record["id"])
+            text = str(record["text"])
+            output_path = json_dir / f"{record_id}.json"
+            
+            console.print(f"Processing {record_id} (extract only)...")
+            triples = extract_from_text(
+                client=llm_client,
+                domain=domain_obj,
+                text=text,
+                record_id=record_id,
+                temperature=temperature,
+                prompt_override=prompt_override.read_text() if prompt_override else None
+            )
+            
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(triples, f, ensure_ascii=False, indent=2)
+            
+            output_files[record_id] = output_path
+            console.print(f"  → {len(triples)} triples saved")
+        
+        console.print(f"\n[bold green]✓ Extraction complete.[/bold green]")
+        console.print(f"Output: {json_dir} ({len(output_files)} files)")
+        console.print(f"\n[dim]Next: python -m src.extract_cli augment connectivity --input {input_file} --domain {domain}[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
@@ -173,89 +168,149 @@ def extract(
 
 @augment_app.command("connectivity")
 def augment_connectivity(
-    input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file (.jsonl, .json, or .csv)", exists=True, file_okay=True, dir_okay=False),
-    output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory containing extracted JSON files"),
-    domain: str = typer.Option(..., "--domain", "-d", help=f"Knowledge domain [required] (Available: {', '.join(list_available_domains())})"),
-    mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode (open or constrained)"),
+    input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file", exists=True),
+    output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory with extracted JSON"),
+    domain: str = typer.Option(..., "--domain", "-d", help=f"Knowledge domain ({', '.join(list_available_domains())})"),
+    mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
     client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c", help="LLM client type"),
     model: Optional[str] = typer.Option(None, "--model", help="Model ID"),
-    api_key: Optional[str] = typer.Option(None, "--api-key", help="API key for Gemini"),
-    base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL for Ollama/LM Studio"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", help="API key"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL"),
     text_field: str = typer.Option("text", "--text-field", help="Field name containing text"),
-    id_field: str = typer.Option("id", "--id-field", help="Field name containing record IDs"),
-    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of records"),
+    id_field: str = typer.Option("id", "--id-field", help="Field name containing IDs"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit records"),
     temperature: float = typer.Option(0.0, "--temp", help="Sampling temperature"),
-    max_disconnected: int = typer.Option(3, "--max-disconnected", help="Target: max allowed disconnected components"),
+    max_disconnected: int = typer.Option(3, "--max-disconnected", help="Target max disconnected components"),
     max_iterations: int = typer.Option(2, "--max-iterations", help="Max refinement iterations"),
     no_progress: bool = typer.Option(False, "--no-progress", help="Hide progress bar"),
     max_workers: Optional[int] = typer.Option(None, "--workers", help="Max parallel workers"),
-    timeout: int = typer.Option(120, "--timeout", help="Request timeout (seconds)"),
+    timeout: int = typer.Option(120, "--timeout", help="Request timeout"),
 ):
     """Connectivity augmentation: Reduce disconnected graph components.
     
-    This strategy analyzes the extracted knowledge graph, identifies disconnected
-    components, and uses the LLM to infer bridging triples that connect them.
-    
-    Requires: Run 'extract' first to create JSON files in the output directory.
-    
     \b
     Examples:
-        # Basic connectivity augmentation
         python -m src.extract_cli augment connectivity --input data.jsonl --domain legal
-        
-        # Aggressive connectivity (target fully connected graph)
-        python -m src.extract_cli augment connectivity --input data.jsonl --domain legal --max-disconnected 1
     """
-    console.print(f"[bold blue]Step 2: Augmentation (Connectivity Strategy)[/bold blue]")
-    console.print(f"Target: ≤ {max_disconnected} disconnected components | Max iterations: {max_iterations}")
-    
-    client_config = _build_client_config(client, model, api_key, base_url, temperature, no_progress, max_workers, timeout)
+    console.print(f"[bold blue]Step 2: Augmentation (Connectivity)[/bold blue]")
+    console.print(f"Target: ≤ {max_disconnected} components | Max iterations: {max_iterations}")
     
     try:
-        pipeline = _init_pipeline(output_dir, client_config, domain, mode, None)
-        results = pipeline.run_full_pipeline(
-            input_path=input_file,
-            text_field=text_field,
-            id_field=id_field,
-            limit=limit,
-            temperature=temperature,
-            run_extraction=False,
-            run_augmentation=True,
-            max_disconnected=max_disconnected,
-            max_iterations=max_iterations
-        )
+        records = load_records(input_file, text_field, id_field, limit)
         
-        console.print("\n[bold green]✓ Connectivity augmentation complete.[/bold green]")
+        from .domains import get_domain
+        domain_obj = get_domain(domain, extraction_mode=mode)
+        config = _build_client_config(client, model, api_key, base_url, temperature, no_progress, max_workers, timeout)
+        llm_client = ClientFactory.create(config)
         
-        table = Table(title="Augmentation Summary")
-        table.add_column("Property", style="cyan")
-        table.add_column("Value", style="magenta")
-        table.add_row("Strategy", "Connectivity")
-        table.add_row("Model", pipeline.extractor.client.get_model_name())
-        table.add_row("Records processed", str(len(results['json_files'])))
-        table.add_row("Output directory", str(output_dir))
-        console.print(table)
+        json_dir = output_dir / "extracted_json"
+        json_dir.mkdir(parents=True, exist_ok=True)
+        
+        from .builder import extract_connected_graph
+        
+        output_files = {}
+        for record in records:
+            record_id = str(record["id"])
+            text = str(record["text"])
+            output_path = json_dir / f"{record_id}.json"
+            
+            existing_triples = None
+            if output_path.exists():
+                console.print(f"[dim]Loading existing triples for {record_id}[/dim]")
+                with open(output_path, "r", encoding="utf-8") as f:
+                    existing_triples = json.load(f)
+            
+            console.print(f"Processing {record_id} (augment connectivity)...")
+            triples, metadata = extract_connected_graph(
+                client=llm_client,
+                domain=domain_obj,
+                text=text,
+                record_id=record_id,
+                initial_triples=existing_triples,
+                temperature=temperature,
+                max_disconnected=max_disconnected,
+                max_iterations=max_iterations,
+                augmentation_strategy="connectivity"
+            )
+            
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(triples, f, ensure_ascii=False, indent=2)
+            
+            output_files[record_id] = output_path
+            console.print(f"  → {len(triples)} triples saved (Final components: {metadata['final_components']})")
+        
+        console.print(f"\n[bold green]✓ Augmentation complete.[/bold green]")
+        console.print(f"Output: {json_dir} ({len(output_files)} files)")
+        console.print(f"\n[dim]Next: python -m src.extract_cli convert --input {json_dir}[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(code=1)
 
 
-# =============================================================================
-# Default augment command (shows available strategies)
-# =============================================================================
-
 @augment_app.callback(invoke_without_command=True)
 def augment_default(ctx: typer.Context):
-    """Default augmentation strategy is 'connectivity'.
-    
-    Run 'augment connectivity --help' for options.
-    """
+    """Show available augmentation strategies."""
     if ctx.invoked_subcommand is None:
-        console.print("[yellow]No strategy specified. Available strategies:[/yellow]")
+        console.print("[yellow]Available strategies:[/yellow]")
         console.print("  • connectivity - Reduce disconnected graph components")
-        console.print("\n[dim]Usage: python -m src.extract_cli augment connectivity --input data.jsonl --domain legal[/dim]")
-        raise typer.Exit(code=0)
+
+
+# =============================================================================
+# CONVERT Command
+# =============================================================================
+
+@app.command()
+def convert(
+    input_dir: Path = typer.Option(..., "--input", "-i", help="Directory with JSON triples", exists=True),
+    output_dir: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for GraphML"),
+):
+    """Convert JSON triples to GraphML format.
+    
+    \b
+    Examples:
+        python -m src.extract_cli convert --input outputs/extracted_json
+    """
+    console.print(f"[bold blue]Converting JSON to GraphML[/bold blue]")
+    
+    graphml_dir = output_dir or input_dir.parent / "graphml"
+    
+    try:
+        graphml_files = convert_json_directory(input_dir, graphml_dir)
+        console.print(f"\n[bold green]✓ Converted {len(graphml_files)} files[/bold green]")
+        console.print(f"Output: {graphml_dir}")
+        console.print(f"\n[dim]Next: python -m src.extract_cli visualize --input {graphml_dir}[/dim]")
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+# =============================================================================
+# VISUALIZE Command
+# =============================================================================
+
+@app.command()
+def visualize(
+    input_dir: Path = typer.Option(..., "--input", "-i", help="Directory with GraphML files", exists=True),
+    output_dir: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for HTML"),
+):
+    """Create interactive HTML visualizations from GraphML.
+    
+    \b
+    Examples:
+        python -m src.extract_cli visualize --input outputs/graphml
+    """
+    console.print(f"[bold blue]Creating Visualizations[/bold blue]")
+    
+    viz_dir = output_dir or input_dir.parent / "visualizations"
+    
+    try:
+        html_files = batch_visualize_graphs(input_dir, viz_dir)
+        console.print(f"\n[bold green]✓ Created {len(html_files)} visualizations[/bold green]")
+        console.print(f"Output: {viz_dir}")
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
