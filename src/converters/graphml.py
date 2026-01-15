@@ -51,8 +51,11 @@ def get_canonical_name(name: str, entity_map: dict[str, str]) -> str:
     return normalized
 
 
+from ..domains import Triple
+
+
 def json_to_graphml(
-    triples: list[dict[str, Any]],
+    triples: list[Triple] | list[dict[str, Any]],
     output_path: Path | str | None = None
 ) -> nx.DiGraph:
     """Convert a list of triples to a NetworkX DiGraph.
@@ -61,7 +64,7 @@ def json_to_graphml(
     case/whitespace variations.
     
     Args:
-        triples: List of triple dictionaries with head, relation, tail
+        triples: List of extracted triples (Triple objects or dicts)
         output_path: Optional path to save GraphML file
         
     Returns:
@@ -70,18 +73,20 @@ def json_to_graphml(
     G = nx.DiGraph()
     entity_map: dict[str, str] = {}
     
-    for item in triples:
-        if not isinstance(item, dict):
-            continue
-        if "head" not in item or "relation" not in item or "tail" not in item:
-            continue
-            
-        original_head = item["head"]
-        original_tail = item["tail"]
-        relation = item["relation"]
-        
-        head = get_canonical_name(original_head, entity_map)
-        tail = get_canonical_name(original_tail, entity_map)
+    # Ensure we have Triple objects
+    validated_triples: list[Triple] = []
+    for t in triples:
+        if isinstance(t, Triple):
+            validated_triples.append(t)
+        else:
+            try:
+                validated_triples.append(Triple(**t))
+            except Exception:
+                continue
+    
+    for t in validated_triples:
+        head = get_canonical_name(t.head, entity_map)
+        tail = get_canonical_name(t.tail, entity_map)
         
         if not head or not tail:
             continue
@@ -93,11 +98,10 @@ def json_to_graphml(
             G.add_node(tail)
         
         # Build edge attributes
-        edge_attrs = {"relation": relation}
-        if "inference" in item:
-            edge_attrs["inference"] = item["inference"]
-        if "justification" in item:
-            edge_attrs["justification"] = item["justification"]
+        edge_attrs = {
+            "relation": t.relation,
+            "inference": str(t.inference)
+        }
         
         G.add_edge(head, tail, **edge_attrs)
     
