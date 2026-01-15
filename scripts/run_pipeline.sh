@@ -61,34 +61,24 @@ echo "=========================================="
 # Step 1: Extract triples
 echo ""
 echo "[Step 1/4] Extracting triples..."
-python -m src.extract_cli extract \
-    --input "$INPUT_FILE" \
-    --domain "$DOMAIN" \
-    --output-dir "$OUTPUT_DIR" \
-    --client "$CLIENT"
+# Start time
+start_time=$(date +%s)
 
-# Step 2: Augment with connectivity
-echo ""
-echo "[Step 2/4] Augmenting graph connectivity..."
-python -m src.extract_cli augment connectivity \
-    --input "$INPUT_FILE" \
-    --domain "$DOMAIN" \
-    --output-dir "$OUTPUT_DIR" \
-    --client "$CLIENT" \
-    --max-disconnected "$MAX_DISCONNECTED" \
-    --max-iterations "$MAX_ITERATIONS"
+# Step 1: Extraction
+echo "Step 1: Extracting triples..."
+python3 -m src extract --input "$INPUT_FILE" --domain "$DOMAIN" --output-dir "$OUTPUT_DIR" --client "$CLIENT"
 
-# Step 3: Convert to GraphML
-echo ""
-echo "[Step 3/4] Converting to GraphML..."
-python -m src.extract_cli convert \
-    --input "$OUTPUT_DIR/extracted_json"
+# Step 2: Augmentation
+echo -e "\nStep 2: Augmenting connectivity..."
+python3 -m src augment connectivity --input "$INPUT_FILE" --domain "$DOMAIN" --output-dir "$OUTPUT_DIR" --client "$CLIENT" --max-disconnected "$MAX_DISCONNECTED" --max-iterations "$MAX_ITERATIONS"
 
-# Step 4: Visualize
-echo ""
-echo "[Step 4/4] Creating visualizations..."
-python -m src.extract_cli visualize \
-    --input "$OUTPUT_DIR/graphml"
+# Step 3: Conversion
+echo -e "\nStep 3: Converting to GraphML..."
+python3 -m src convert --input "$OUTPUT_DIR/extracted_json"
+
+# Step 4: Visualization
+echo -e "\nStep 4: Creating visualizations..."
+python3 -m src visualize network --input "$OUTPUT_DIR/graphml" --dark-mode
 
 echo ""
 echo "=========================================="

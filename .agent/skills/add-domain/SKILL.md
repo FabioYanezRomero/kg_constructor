@@ -182,11 +182,15 @@ outputs/kg_extraction/extracted_json/
 
 ### CLI Commands
 ```bash
+# Full Pipeline Execution (Compound)
+python -m src extract --input data.jsonl --domain legal
+python -m src augment connectivity --input data.jsonl --domain legal
+
 # Extract (Step 1)
-python -m src.extract_cli extract --input data.jsonl --domain my_domain
+python -m src extract --input data.jsonl --domain my_domain
 
 # Augment connectivity (Step 2)
-python -m src.extract_cli augment connectivity --input data.jsonl --domain my_domain
+python -m src augment connectivity --input data.jsonl --domain my_domain
 
 # Key options:
 #   --max-disconnected N   Target max disconnected components (default: 3)

@@ -7,13 +7,10 @@ Commands:
     extract              - Step 1: Extract triples from text
     augment connectivity - Step 2: Reduce disconnected graph components
     convert              - Convert JSON triples to GraphML
-    visualize            - Create interactive visualizations
-
-Full pipeline is achieved by running commands in sequence:
-    python -m src.extract_cli extract --input data.jsonl --domain legal
-    python -m src.extract_cli augment connectivity --input data.jsonl --domain legal
-    python -m src.extract_cli convert --input outputs/extracted_json
-    python -m src.extract_cli visualize --input outputs/graphml
+    visualize network    - Show interactive network graph (Plotly)
+    visualize extraction - Show entity highlights in source text (langextract)
+    list domains         - List available knowledge domains
+    list clients         - List available LLM client types
 """
 
 from __future__ import annotations
@@ -35,14 +32,27 @@ from .domains import list_available_domains, ExtractionMode
 
 # Initialize Typer apps
 app = typer.Typer(
-    help="Knowledge graph generation CLI. Commands: extract, augment, convert, visualize",
+    help="Knowledge graph generation framework.",
     no_args_is_help=True
 )
+
 augment_app = typer.Typer(
-    help="Step 2: Augment the knowledge graph. Strategies: connectivity",
+    help="Step 2: Augment the knowledge graph.",
     no_args_is_help=True
 )
 app.add_typer(augment_app, name="augment")
+
+visualize_app = typer.Typer(
+    help="Create interactive HTML visualizations.",
+    no_args_is_help=True
+)
+app.add_typer(visualize_app, name="visualize")
+
+list_app = typer.Typer(
+    help="List available resources.",
+    no_args_is_help=True
+)
+app.add_typer(list_app, name="list")
 
 console = Console()
 
@@ -83,6 +93,32 @@ def _build_client_config(
 
 
 # =============================================================================
+# LIST Commands
+# =============================================================================
+
+@list_app.command("domains")
+def list_domains():
+    """List available knowledge domains."""
+    domains = list_available_domains()
+    table = Table(title="Available Knowledge Domains")
+    table.add_column("Domain Name", style="cyan")
+    for d in domains:
+        table.add_row(d)
+    console.print(table)
+
+
+@list_app.command("clients")
+def list_clients():
+    """List available LLM client types."""
+    clients = ClientFactory.get_available_clients()
+    table = Table(title="Available LLM Clients")
+    table.add_column("Client Type", style="green")
+    for c in clients:
+        table.add_row(c)
+    console.print(table)
+
+
+# =============================================================================
 # EXTRACT Command (Step 1)
 # =============================================================================
 
@@ -90,7 +126,7 @@ def _build_client_config(
 def extract(
     input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file (.jsonl, .json, or .csv)", exists=True),
     output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory to save outputs"),
-    domain: str = typer.Option(..., "--domain", "-d", help=f"Knowledge domain [required] ({', '.join(list_available_domains())})"),
+    domain: str = typer.Option(..., "--domain", "-d", help="Knowledge domain [required] (use 'list domains' to see all)"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
     client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c", help="LLM client type"),
     model: Optional[str] = typer.Option(None, "--model", help="Model ID"),
@@ -109,7 +145,7 @@ def extract(
     
     \b
     Examples:
-        python -m src.extract_cli extract --input data.jsonl --domain legal
+        python -m src extract --input data.jsonl --domain legal
     """
     console.print(f"[bold blue]Step 1: Extraction[/bold blue]")
     console.print(f"Input: [dim]{input_file}[/dim] | Domain: [green]{domain}[/green]")
@@ -155,7 +191,7 @@ def extract(
         
         console.print(f"\n[bold green]✓ Extraction complete.[/bold green]")
         console.print(f"Output: {json_dir} ({len(output_files)} files)")
-        console.print(f"\n[dim]Next: python -m src.extract_cli augment connectivity --input {input_file} --domain {domain}[/dim]")
+        console.print(f"\n[dim]Next: python -m src augment connectivity --input {input_file} --domain {domain}[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
@@ -170,7 +206,7 @@ def extract(
 def augment_connectivity(
     input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file", exists=True),
     output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory with extracted JSON"),
-    domain: str = typer.Option(..., "--domain", "-d", help=f"Knowledge domain ({', '.join(list_available_domains())})"),
+    domain: str = typer.Option(..., "--domain", "-d", help="Knowledge domain (use 'list domains' to see all)"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
     client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c", help="LLM client type"),
     model: Optional[str] = typer.Option(None, "--model", help="Model ID"),
@@ -190,7 +226,7 @@ def augment_connectivity(
     
     \b
     Examples:
-        python -m src.extract_cli augment connectivity --input data.jsonl --domain legal
+        python -m src augment connectivity --input data.jsonl --domain legal
     """
     console.print(f"[bold blue]Step 2: Augmentation (Connectivity)[/bold blue]")
     console.print(f"Target: ≤ {max_disconnected} components | Max iterations: {max_iterations}")
@@ -243,7 +279,7 @@ def augment_connectivity(
         
         console.print(f"\n[bold green]✓ Augmentation complete.[/bold green]")
         console.print(f"Output: {json_dir} ({len(output_files)} files)")
-        console.print(f"\n[dim]Next: python -m src.extract_cli convert --input {json_dir}[/dim]")
+        console.print(f"\n[dim]Next: python -m src convert --input {json_dir}[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
@@ -271,7 +307,7 @@ def convert(
     
     \b
     Examples:
-        python -m src.extract_cli convert --input outputs/extracted_json
+        python -m src convert --input outputs/extracted_json
     """
     console.print(f"[bold blue]Converting JSON to GraphML[/bold blue]")
     
@@ -281,40 +317,90 @@ def convert(
         graphml_files = convert_json_directory(input_dir, graphml_dir)
         console.print(f"\n[bold green]✓ Converted {len(graphml_files)} files[/bold green]")
         console.print(f"Output: {graphml_dir}")
-        console.print(f"\n[dim]Next: python -m src.extract_cli visualize --input {graphml_dir}[/dim]")
+        console.print(f"\n[dim]Next: python -m src visualize network --input {graphml_dir}[/dim]")
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(code=1)
 
 
 # =============================================================================
-# VISUALIZE Command
+# VISUALIZE Commands
 # =============================================================================
 
-@app.command()
-def visualize(
+@visualize_app.command("network")
+def visualize_network(
     input_dir: Path = typer.Option(..., "--input", "-i", help="Directory with GraphML files", exists=True),
     output_dir: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for HTML"),
     dark_mode: bool = typer.Option(False, "--dark-mode", help="Enable premium dark mode theme"),
     layout: str = typer.Option("spring", "--layout", help="Graph layout (spring, circular, kamada_kawai, shell)"),
 ):
-    """Create interactive HTML visualizations from GraphML.
+    """Create interactive network visualizations from GraphML.
     
     \b
     Examples:
-        python -m src.extract_cli visualize --input outputs/graphml --dark-mode --layout kamada_kawai
+        python -m src visualize network --input outputs/graphml --dark-mode
     """
-    console.print(f"[bold blue]Creating Visualizations[/bold blue]")
+    console.print(f"[bold blue]Creating Network Visualizations[/bold blue]")
     
     viz_dir = output_dir or input_dir.parent / "visualizations"
     
     try:
         html_files = batch_visualize_graphs(input_dir, viz_dir, dark_mode=dark_mode, layout=layout)
-        console.print(f"\n[bold green]✓ Created {len(html_files)} visualizations[/bold green]")
-        console.print(f"Output: {viz_dir} (Theme: {'Dark' if dark_mode else 'Light'}, Layout: {layout})")
+        console.print(f"\n[bold green]✓ Created {len(html_files)} network visualizations[/bold green]")
+        console.print(f"Output: {viz_dir}")
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(code=1)
+
+
+@visualize_app.command("extraction")
+def visualize_extraction(
+    input_file: Path = typer.Option(..., "--input", "-i", help="Path to original text data (.jsonl, .json, or .csv)", exists=True),
+    triples_dir: Path = typer.Option(..., "--triples", "-t", help="Directory with extracted JSON triples", exists=True),
+    output_dir: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for HTML"),
+    text_field: str = typer.Option("text", "--text-field", help="Field name containing text"),
+    id_field: str = typer.Option("id", "--id-field", help="Field name containing record IDs"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of records"),
+    animation_speed: float = typer.Option(1.0, "--speed", help="Animation speed for highlights"),
+    group_by: str = typer.Option("entity_type", "--group-by", help="How to group highlights (entity_type, relation)"),
+):
+    """Create interactive text visualizations with entity highlights.
+    
+    \b
+    Examples:
+        python -m src visualize extraction --input data.jsonl --triples outputs/extracted_json
+    """
+    console.print(f"[bold blue]Creating Extraction Visualizations[/bold blue]")
+    
+    viz_dir = output_dir or triples_dir.parent / "visualizations_extraction"
+    
+    try:
+        records = load_records(input_file, text_field, id_field, limit)
+        visualizer = EntityVisualizer(animation_speed=animation_speed)
+        
+        # Prepare records for batch visualizer
+        record_map = {}
+        for r in records:
+            rid = str(r["id"])
+            text = str(r["text"])
+            triple_file = triples_dir / f"{rid}.json"
+            if triple_file.exists():
+                with open(triple_file, "r", encoding="utf-8") as f:
+                    triples = json.load(f)
+                record_map[rid] = (text, triples)
+        
+        html_files = visualizer.batch_visualize(record_map, viz_dir, group_by=group_by)
+        console.print(f"\n[bold green]✓ Created {len(html_files)} extraction visualizations[/bold green]")
+        console.print(f"Output: {viz_dir}")
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+@app.callback()
+def main():
+    """Knowledge graph generation framework."""
+    pass
 
 
 if __name__ == "__main__":
