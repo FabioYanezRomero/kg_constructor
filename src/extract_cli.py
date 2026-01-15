@@ -1,14 +1,15 @@
 """Unified command-line interface for knowledge graph generation using Typer.
 
 This CLI supports multiple LLM backends: Gemini API, Ollama, and LM Studio.
+Supports JSONL (recommended), JSON, and CSV input formats.
 
 Commands:
     extract              - Step 1: Extract triples from text
     augment connectivity - Step 2: Reduce disconnected graph components
 
 Full pipeline is achieved by running both commands in sequence:
-    python -m src.extract_cli extract --csv data.csv
-    python -m src.extract_cli augment connectivity --csv data.csv
+    python -m src.extract_cli extract --input data.jsonl --domain legal
+    python -m src.extract_cli augment connectivity --input data.jsonl --domain legal
 """
 
 from __future__ import annotations
@@ -97,7 +98,7 @@ def _init_pipeline(
 
 @app.command()
 def extract(
-    csv: Path = typer.Option(..., "--csv", "-f", help="Path to input CSV file", exists=True, file_okay=True, dir_okay=False),
+    input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file (.jsonl, .json, or .csv)", exists=True, file_okay=True, dir_okay=False),
     output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory to save all outputs"),
     domain: str = typer.Option(..., "--domain", "-d", help=f"Knowledge domain [required] (Available: {', '.join(list_available_domains())})"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode (open or constrained)"),
@@ -105,8 +106,8 @@ def extract(
     model: Optional[str] = typer.Option(None, "--model", help="Model ID (e.g., gemini-2.0-flash-exp, llama3.1)"),
     api_key: Optional[str] = typer.Option(None, "--api-key", help="API key for Gemini (optional if env var set)"),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL for Ollama/LM Studio"),
-    text_column: str = typer.Option("background", "--text-column", help="CSV column containing text"),
-    id_column: str = typer.Option("id", "--id-column", help="CSV column containing record IDs"),
+    text_field: str = typer.Option("text", "--text-field", help="Field name containing text"),
+    id_field: str = typer.Option("id", "--id-field", help="Field name containing record IDs"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of records to process"),
     temperature: float = typer.Option(0.0, "--temp", help="Sampling temperature"),
     prompt_override: Optional[Path] = typer.Option(None, "--prompt", help="Override extraction prompt file", exists=True),
@@ -116,19 +117,22 @@ def extract(
 ):
     """Step 1: Extract knowledge graph triples from text.
     
-    This command extracts explicit triples from source text using langextract.
-    The output is saved as JSON files in the output directory.
+    Supports JSONL (recommended), JSON, and CSV input formats.
+    Format is auto-detected from file extension.
     
     \b
     Examples:
-        # Basic extraction
-        python -m src.extract_cli extract --csv data.csv --domain legal
+        # Extract from JSONL (recommended)
+        python -m src.extract_cli extract --input data.jsonl --domain legal
         
-        # Full pipeline (run extract, then augment)
-        python -m src.extract_cli extract --csv data.csv
-        python -m src.extract_cli augment connectivity --csv data.csv
+        # Extract from JSON array
+        python -m src.extract_cli extract --input data.json --domain legal
+        
+        # Extract from CSV (legacy)
+        python -m src.extract_cli extract --input data.csv --domain legal --text-field background
     """
     console.print(f"[bold blue]Step 1: Extraction[/bold blue]")
+    console.print(f"Input: [dim]{input_file}[/dim]")
     console.print(f"Domain: [green]{domain}[/green] | Mode: [dim]{mode.value}[/dim]")
     
     client_config = _build_client_config(client, model, api_key, base_url, temperature, no_progress, max_workers, timeout)
@@ -136,9 +140,9 @@ def extract(
     try:
         pipeline = _init_pipeline(output_dir, client_config, domain, mode, prompt_override)
         results = pipeline.run_full_pipeline(
-            csv_path=csv,
-            text_column=text_column,
-            id_column=id_column,
+            input_path=input_file,
+            text_field=text_field,
+            id_field=id_field,
             limit=limit,
             temperature=temperature,
             run_extraction=True,
@@ -156,7 +160,7 @@ def extract(
         table.add_row("Output directory", str(output_dir))
         console.print(table)
         
-        console.print("\n[dim]Next step: python -m src.extract_cli augment connectivity --csv data.csv[/dim]")
+        console.print(f"\n[dim]Next step: python -m src.extract_cli augment connectivity --input {input_file} --domain {domain}[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
@@ -169,7 +173,7 @@ def extract(
 
 @augment_app.command("connectivity")
 def augment_connectivity(
-    csv: Path = typer.Option(..., "--csv", "-f", help="Path to input CSV file", exists=True, file_okay=True, dir_okay=False),
+    input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file (.jsonl, .json, or .csv)", exists=True, file_okay=True, dir_okay=False),
     output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory containing extracted JSON files"),
     domain: str = typer.Option(..., "--domain", "-d", help=f"Knowledge domain [required] (Available: {', '.join(list_available_domains())})"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode (open or constrained)"),
@@ -177,8 +181,8 @@ def augment_connectivity(
     model: Optional[str] = typer.Option(None, "--model", help="Model ID"),
     api_key: Optional[str] = typer.Option(None, "--api-key", help="API key for Gemini"),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL for Ollama/LM Studio"),
-    text_column: str = typer.Option("background", "--text-column", help="CSV column containing text"),
-    id_column: str = typer.Option("id", "--id-column", help="CSV column containing record IDs"),
+    text_field: str = typer.Option("text", "--text-field", help="Field name containing text"),
+    id_field: str = typer.Option("id", "--id-field", help="Field name containing record IDs"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of records"),
     temperature: float = typer.Option(0.0, "--temp", help="Sampling temperature"),
     max_disconnected: int = typer.Option(3, "--max-disconnected", help="Target: max allowed disconnected components"),
@@ -197,10 +201,10 @@ def augment_connectivity(
     \b
     Examples:
         # Basic connectivity augmentation
-        python -m src.extract_cli augment connectivity --csv data.csv
+        python -m src.extract_cli augment connectivity --input data.jsonl --domain legal
         
         # Aggressive connectivity (target fully connected graph)
-        python -m src.extract_cli augment connectivity --csv data.csv --max-disconnected 1 --max-iterations 5
+        python -m src.extract_cli augment connectivity --input data.jsonl --domain legal --max-disconnected 1
     """
     console.print(f"[bold blue]Step 2: Augmentation (Connectivity Strategy)[/bold blue]")
     console.print(f"Target: ≤ {max_disconnected} disconnected components | Max iterations: {max_iterations}")
@@ -210,9 +214,9 @@ def augment_connectivity(
     try:
         pipeline = _init_pipeline(output_dir, client_config, domain, mode, None)
         results = pipeline.run_full_pipeline(
-            csv_path=csv,
-            text_column=text_column,
-            id_column=id_column,
+            input_path=input_file,
+            text_field=text_field,
+            id_field=id_field,
             limit=limit,
             temperature=temperature,
             run_extraction=False,
@@ -238,7 +242,7 @@ def augment_connectivity(
 
 
 # =============================================================================
-# Default augment command (alias for connectivity)
+# Default augment command (shows available strategies)
 # =============================================================================
 
 @augment_app.callback(invoke_without_command=True)
@@ -250,7 +254,7 @@ def augment_default(ctx: typer.Context):
     if ctx.invoked_subcommand is None:
         console.print("[yellow]No strategy specified. Available strategies:[/yellow]")
         console.print("  • connectivity - Reduce disconnected graph components")
-        console.print("\n[dim]Usage: python -m src.extract_cli augment connectivity --csv data.csv[/dim]")
+        console.print("\n[dim]Usage: python -m src.extract_cli augment connectivity --input data.jsonl --domain legal[/dim]")
         raise typer.Exit(code=0)
 
 

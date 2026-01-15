@@ -3,27 +3,27 @@ name: add-llm-client
 description: Adds a new LLM client provider to the clients module. Use when implementing support for a new LLM provider like Anthropic, OpenAI, Groq, or any OpenAI-compatible API.
 ---
 
-# Add LLM Client Skill
+# Add LLM Client: New Provider Implementation
 
-This skill guides you through adding a new LLM client provider to the `src/clients` module.
+This skill guides you through adding a new LLM client provider to `src/clients`.
 
-## When to use this skill
+## Architecture Overview
 
-- Adding support for a new LLM provider (e.g., Anthropic, OpenAI, Groq)
-- Implementing a new local model server client
-- Creating a wrapper for an OpenAI-compatible API
+```text
+src/clients/
+├── __init__.py          # ClientFactory registry + exports
+├── base.py              # BaseLLMClient ABC + LLMClientError
+├── config.py            # ClientConfig dataclass + ClientType
+└── providers/
+    ├── __init__.py      # Provider exports
+    ├── gemini.py        # Google Gemini (native SDK)
+    ├── ollama.py        # Ollama (OpenAI-compatible)
+    └── lmstudio.py      # LM Studio (OpenAI-compatible)
+```
 
-## Overview
+---
 
-The clients module uses a registry-based factory pattern:
-1. Each client inherits from `BaseLLMClient` (which uses `abc.ABC` with `@abstractmethod`)
-2. Implements required abstract methods
-3. Provides `from_config()` classmethod for factory instantiation
-4. Gets registered in `__init__.py`
-
-## Step-by-step guide
-
-### Step 1: Create the provider file
+## Step 1: Create the Provider File
 
 Create `src/clients/providers/<provider_name>.py`:
 
@@ -72,7 +72,7 @@ class <ProviderName>Client(BaseLLMClient):
         **kwargs: Any
     ) -> list[dict[str, Any]]:
         """Extract with source grounding (char positions)."""
-        # TODO: Implement extraction logic
+        # TODO: Implement with langextract integration
         raise NotImplementedError
 
     def generate_json(
@@ -111,73 +111,113 @@ class <ProviderName>Client(BaseLLMClient):
 __all__ = ["<ProviderName>Client"]
 ```
 
-### Step 2: Update providers/__init__.py
+---
+
+## Step 2: Update providers/__init__.py
 
 ```python
 from .<provider_name> import <ProviderName>Client
-# Add to __all__ list
+
+__all__ = [
+    # ... existing clients
+    "<ProviderName>Client",
+]
 ```
 
-### Step 3: Register in clients/__init__.py
+---
+
+## Step 3: Register in ClientFactory
+
+Update `src/clients/__init__.py`:
 
 ```python
 from .providers import <ProviderName>Client
+
 ClientFactory.register("<provider_name>", <ProviderName>Client)
-# Add to __all__ list
 ```
 
-### Step 4: Update ClientType in config.py
+---
+
+## Step 4: Update ClientType
+
+Add to `src/clients/config.py`:
 
 ```python
 ClientType = Literal["gemini", "ollama", "lmstudio", "<provider_name>"]
 ```
 
-### Step 5: Test your client
+---
 
-```python
-# Verify registration
-from src.clients import ClientFactory
-print(ClientFactory.get_available_clients())
-
-# Create via factory
-from src.clients import ClientConfig, ClientFactory
-config = ClientConfig(client_type="<provider_name>")
-client = ClientFactory.create(config)
-print(client.get_model_name())
-```
-
-## Required abstract methods
-
-| Method | Purpose |
-|--------|---------|
-| `extract()` | Extract with source grounding (char positions) |
-| `generate_json()` | Generate structured JSON (no grounding) |
-| `get_model_name()` | Return model identifier string |
-| `supports_structured_output()` | Whether native JSON schema is supported |
-| `from_config()` | Create instance from ClientConfig |
-
-> **Note:** `BaseLLMClient` uses `abc.ABC` with `@abstractmethod` decorators. Missing implementations will raise `TypeError` at instantiation.
-
-## Example usage
+## Step 5: Verify Registration
 
 ```python
 from src.clients import ClientFactory, ClientConfig
 
-config = ClientConfig(client_type="yourprovider", model_id="my-model")
+# Check available clients
+print(ClientFactory.get_available_clients())
+
+# Create via factory
+config = ClientConfig(client_type="<provider_name>", model_id="my-model")
 client = ClientFactory.create(config)
-results = client.extract(text="...", prompt_description="Extract entities")
+print(client.get_model_name())
 ```
 
-## Key principles
+---
 
-1. **from_config() handles defaults** - Don't put provider logic in ClientConfig
+## Required Abstract Methods
+
+| Method | Purpose | Returns |
+|--------|---------|---------|
+| `extract()` | Source-grounded extraction (char positions) | `list[dict]` |
+| `generate_json()` | Structured JSON generation (no grounding) | `list[dict]` |
+| `get_model_name()` | Model identifier for logging | `str` |
+| `supports_structured_output()` | Native JSON schema support | `bool` |
+| `from_config()` | Factory method | `BaseLLMClient` |
+
+> [!NOTE]
+> `BaseLLMClient` uses `abc.ABC` with `@abstractmethod`. Missing implementations raise `TypeError` at instantiation.
+
+---
+
+## Decision Tree
+
+| Scenario | Reference Implementation |
+|----------|-------------------------|
+| OpenAI-compatible API | `ollama.py`, `lmstudio.py` |
+| Native SDK | `gemini.py` |
+| Needs structured output | Check provider docs for JSON mode |
+
+---
+
+## CLI Integration
+
+Once registered, your client is automatically available in the CLI:
+
+```bash
+python -m src.extract_cli extract --input data.jsonl --domain legal --client <provider_name>
+```
+
+---
+
+## Error Handling
+
+Always raise `LLMClientError` for API failures:
+
+```python
+from ..base import LLMClientError
+
+try:
+    response = api.generate(...)
+except SomeAPIError as e:
+    raise LLMClientError(f"<Provider> API error: {e}") from e
+```
+
+---
+
+## Key Principles
+
+1. **`from_config()` handles defaults** - Don't put provider logic in `ClientConfig`
 2. **Check None explicitly** - Use `is not None` for optional fields
-3. **Raise LLMClientError** - Consistent error handling
+3. **Raise `LLMClientError`** - Consistent error handling
 4. **Document defaults in docstring** - Make clear what defaults are applied
-5. **TYPE_CHECKING at top** - Place import block at top of file, not bottom
-
-## Decision tree
-
-- **OpenAI-compatible API?** → Look at `ollama.py` or `lmstudio.py` for patterns
-- **Native SDK available?** → Look at `gemini.py` for patterns
-- **Need source grounding?** → Use langextract integration in `extract()`
+5. **TYPE_CHECKING at top** - Import `ClientConfig` inside `TYPE_CHECKING` block

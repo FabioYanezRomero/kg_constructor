@@ -10,6 +10,7 @@ from .clients import BaseLLMClient, ClientConfig, ClientFactory
 from .extractor import KnowledgeGraphExtractor
 from .visualizer import EntityVisualizer
 from .domains import KnowledgeDomain
+from .datasets import load_records, DataLoadError
 
 
 class ExtractionPipeline:
@@ -67,11 +68,11 @@ class ExtractionPipeline:
         # Initialize entity visualizer
         self.entity_visualizer = EntityVisualizer() if enable_entity_viz else None
 
-    def process_csv(
+    def process_input(
         self,
-        csv_path: Path,
-        text_column: str = "background",
-        id_column: str = "id",
+        input_path: Path,
+        text_field: str = "text",
+        id_field: str = "id",
         limit: int | None = None,
         output_subdir: str = "json",
         temperature: float = 0.0,
@@ -81,35 +82,45 @@ class ExtractionPipeline:
         max_disconnected: int = 3,
         max_iterations: int = 2,
     ) -> dict[str, Any]:
-        """Process a CSV file and save triples as JSON files.
+        """Process an input file and save triples as JSON files.
+        
+        Supports JSONL (recommended), JSON, and CSV formats.
+        Format is auto-detected from file extension.
 
         Args:
-            csv_path: Path to CSV file
-            text_column: Name of column containing text
-            id_column: Name of column containing record IDs
+            input_path: Path to input file (.jsonl, .json, or .csv)
+            text_field: Name of field containing text (default: "text")
+            id_field: Name of field containing record IDs (default: "id")
             limit: Optional limit on number of records
             output_subdir: Subdirectory within output_dir for JSON files
             temperature: Sampling temperature
             save_texts: Whether to save original texts for entity visualization
+            run_extraction: Whether to run extraction step
+            run_augmentation: Whether to run augmentation step
+            max_disconnected: Max allowed disconnected components
+            max_iterations: Max augmentation iterations
 
         Returns:
             Dictionary with:
                 - 'output_files': mapping record IDs to JSON file paths
                 - 'texts': mapping record IDs to original texts (if save_texts=True)
         """
-        print(f"Processing CSV: {csv_path}")
+        print(f"Processing input: {input_path}")
         print(f"Using model: {self.extractor.get_model_name()}")
-        print(f"Text column: {text_column}, ID column: {id_column}")
+        print(f"Text field: {text_field}, ID field: {id_field}")
 
         if limit:
             print(f"Limiting to {limit} records")
 
-        # Load CSV to extract both texts and triples
-        import pandas as pd
-        df = pd.read_csv(csv_path, encoding='utf-8-sig')
-
-        if limit:
-            df = df.head(limit)
+        # Load records using the multi-format loader
+        records = load_records(
+            path=input_path,
+            text_field=text_field,
+            id_field=id_field,
+            limit=limit
+        )
+        
+        print(f"Loaded {len(records)} records")
 
         save_dir = self.output_dir / output_subdir
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -118,9 +129,9 @@ class ExtractionPipeline:
         all_metadata = {}
         texts_map = {} if save_texts else None
 
-        for _, row in df.iterrows():
-            record_id = str(row[id_column])
-            text = str(row[text_column])
+        for record in records:
+            record_id = str(record["id"])
+            text = str(record["text"])
             output_path = save_dir / f"{record_id}.json"
             
             existing_triples = None
@@ -148,7 +159,6 @@ class ExtractionPipeline:
                 print(f"Running extraction for {record_id}")
                 triples = self.extractor.extract_from_text(text, record_id, temperature)
             else:
-                # Both false? Should not happen with current CLI, but if so:
                 triples = existing_triples
 
             # Save results
@@ -321,9 +331,9 @@ class ExtractionPipeline:
 
     def run_full_pipeline(
         self,
-        csv_path: Path,
-        text_column: str = "background",
-        id_column: str = "id",
+        input_path: Path,
+        text_field: str = "text",
+        id_field: str = "id",
         limit: int | None = None,
         create_graph_viz: bool = True,
         create_entity_viz: bool = True,
@@ -334,19 +344,25 @@ class ExtractionPipeline:
         max_iterations: int = 2
     ) -> dict[str, Any]:
         """Run the complete pipeline: extract, convert, visualize.
+        
+        Supports JSONL (recommended), JSON, and CSV input formats.
 
         This pipeline creates TWO types of visualizations:
         1. Graph visualizations: Network view showing entities (nodes) and relations (edges)
         2. Entity visualizations: Text view highlighting entities in original text
 
         Args:
-            csv_path: Path to input CSV file
-            text_column: Name of column containing text
-            id_column: Name of column containing record IDs
+            input_path: Path to input file (.jsonl, .json, or .csv)
+            text_field: Name of field containing text (default: "text")
+            id_field: Name of field containing record IDs (default: "id")
             limit: Optional limit on number of records
             create_graph_viz: Whether to create graph/network visualizations
             create_entity_viz: Whether to create entity highlighting visualizations
             temperature: Sampling temperature
+            run_extraction: Whether to run extraction step
+            run_augmentation: Whether to run augmentation step
+            max_disconnected: Max allowed disconnected components
+            max_iterations: Max augmentation iterations
 
         Returns:
             Dictionary with paths to all outputs:
@@ -362,11 +378,11 @@ class ExtractionPipeline:
         print(f"Client: {self.extractor.client.__class__.__name__}")
         print("=" * 80)
 
-        # Step 1: Extract triples from CSV (and save original texts)
-        extraction_result = self.process_csv(
-            csv_path=csv_path,
-            text_column=text_column,
-            id_column=id_column,
+        # Step 1: Extract triples from input file (and save original texts)
+        extraction_result = self.process_input(
+            input_path=input_path,
+            text_field=text_field,
+            id_field=id_field,
             limit=limit,
             output_subdir="extracted_json",
             temperature=temperature,

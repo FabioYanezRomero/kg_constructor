@@ -18,28 +18,46 @@ src/domains/<domain_name>/
 │   ├── prompt_open.txt        # Comprehensive extraction prompt
 │   ├── prompt_constrained.txt # Type-constrained extraction prompt
 │   └── examples.json          # Few-shot extraction examples
-└── augmentation/
-    └── connectivity/          # Strategy folder (matches CLI: augment connectivity)
-        ├── prompt.txt
-        └── examples.json
+├── augmentation/
+│   └── connectivity/          # Strategy folder (matches CLI: augment connectivity)
+│       ├── prompt.txt
+│       └── examples.json
+└── schema.json                # Optional: entity/relation type constraints
 ```
 
+---
+
+## How Resource Auto-Discovery Works
+
+The `KnowledgeDomain` base class uses Python's `inspect.getfile()` to locate the directory where your subclass is defined:
+
+```python
+# In KnowledgeDomain.__init__():
+self._root_dir = Path(inspect.getfile(self.__class__)).parent
+```
+
+This means:
+- **No manual path configuration needed** - the class finds its own resources
+- **Portable** - works regardless of where the package is installed
+- **Override available** - pass `root_dir=` to the constructor for custom locations
+
+> [!NOTE]
+> If you move the domain class file, the resource lookup moves with it. Keep the class file in the same directory as the resource folders.
+
+---
 
 ## Step 1: Create the Resource Files
 
-### Extraction Prompts (`extraction/prompt_open.txt` & `extraction/prompt_constrained.txt`)
-Create these as plain text files. 
-- `prompt_open.txt`: Focus on capturing all explicit relationships.
-- `prompt_constrained.txt`: Focus on specific entity/relation types relevant to the domain.
+### Extraction Prompts
+Create `extraction/prompt_open.txt` and `extraction/prompt_constrained.txt`:
+- `prompt_open.txt`: Capture all explicit relationships
+- `prompt_constrained.txt`: Use with `schema.json` for type-restricted extraction
 
 > [!IMPORTANT]
-> **DO NOT include output format instructions** (e.g., "Return a JSON array...") in extraction prompts. 
-> The `langextract` framework automatically generates the output schema instructions based on the provided few-shot examples. 
-> Including formatting instructions in the prompt text can conflict with the framework's internal logic and confuse the LLM.
+> **DO NOT include output format instructions** (e.g., "Return a JSON array...") in prompts.
+> The `langextract` framework generates format instructions from examples.
 
 ### Extraction Examples (`extraction/examples.json`)
-Create a JSON file following the `ExtractionExample` model:
-
 ```json
 [
   {
@@ -62,46 +80,59 @@ Create a JSON file following the `ExtractionExample` model:
 ]
 ```
 
-### Augmentation Resources (`augmentation/prompt.txt` & `augmentation/examples.json`)
-The augmentation prompt guides the generative LLM to connect disconnected graph components. Examples follow the `AugmentationExample` model.
+### Augmentation Resources (`augmentation/<strategy>/`)
+Each strategy has its own folder with `prompt.txt` and `examples.json`.
+
+---
 
 ## Step 2: Implement the Domain Class
 
-Create `src/domains/<domain_name>/__init__.py`. This class inherits from `KnowledgeDomain` and registers itself. The system automatically finds the resource files based on the directory where your class is defined.
+Create `src/domains/<domain_name>/__init__.py`:
 
 ```python
 from ..base import KnowledgeDomain
-from ..registry import register_domain
+from ..registry import domain  # Decorator-based registration
 
-class NewDomain(KnowledgeDomain):
-    """Description of the new domain."""
+@domain("my_domain")  # This ID is used with --domain CLI flag
+class MyDomain(KnowledgeDomain):
+    """Description of the domain."""
     pass
 
-# Register the domain with a unique identifier
-register_domain("new_domain_id", NewDomain)
-
-__all__ = ["NewDomain"]
+__all__ = ["MyDomain"]
 ```
 
-## Step 3: Add a Schema (Optional but Recommended)
-Create `src/domains/<domain_name>/schema.json` to define allowed types:
+The `@domain("my_domain")` decorator calls `register_domain()` when the module is imported.
+
+---
+
+## Step 3: Add a Schema (Optional)
+
+Create `schema.json` to define allowed types for constrained extraction:
 
 ```json
 {
-  "entity_types": ["Person", "Company", "Location"],
-  "relation_types": ["works_for", "located_in"]
+  "entity_types": ["Person", "Company", "Drug"],
+  "relation_types": ["works_for", "developed", "treats"]
 }
 ```
 
-## Step 4: Register in the Domain Hub
+**How schema integrates:**
+- Loaded via `domain.schema` property (lazy-loaded on first access)
+- Used by `prompt_constrained.txt` to restrict output types
+- Access with: `domain.schema.entity_types`, `domain.schema.relation_types`
 
-Update `src/domains/__init__.py` to import your new domain:
+---
+
+## Step 4: Register in Domain Hub
+
+Update `src/domains/__init__.py` to import your domain:
 
 ```python
-# src/domains/__init__.py
-from . import legal
-from . import new_domain  # Add this line
+# This import triggers the @domain decorator → registration
+from . import my_domain
 ```
+
+---
 
 ## Step 5: Verification
 
@@ -109,51 +140,83 @@ from . import new_domain  # Add this line
 from src.domains import get_domain, list_available_domains
 
 # Check registration
-assert "new_domain_id" in list_available_domains()
+assert "my_domain" in list_available_domains()
 
 # Check resource loading
-domain = get_domain("new_domain_id")
-print(domain.get_extraction_prompt())
-print(len(domain.get_extraction_examples()))
+domain = get_domain("my_domain")
+print(domain.extraction.prompt[:100])  # First 100 chars
+print(domain.get_augmentation("connectivity").prompt[:100])
+print(domain.schema.entity_types)  # Empty list if no schema.json
 ```
 
-## Modifying an Existing Domain
+---
 
-Since domains are resource-based, modifying them is straightforward and usually doesn't require code changes.
+## Pydantic Validation Timing
 
-### 1. Updating Prompts
-To change how an extraction or augmentation is performed:
-- Locate the domain folder: `src/domains/<domain_name>/`
-- Edit the corresponding `.txt` file:
-    - `extraction/prompt_open.txt`
-    - `extraction/prompt_constrained.txt`
-    - `augmentation/prompt.txt`
-- Changes take effect as soon as a new `KnowledgeDomain` instance is created.
+Validation occurs **on first access** (lazy loading):
 
-### 2. Adding Few-Shot Examples
-To improve performance with more examples:
-- Open the `examples.json` file in either the `extraction/` or `augmentation/` folder.
-- Append new objects following the schema.
-- **Validation**: The next time the domain is used, Pydantic will automatically validate your new examples. If you made a JSON syntax or schema error, you will get a clear error message.
+| Resource | Validated When |
+|----------|----------------|
+| `domain.extraction.prompt` | First `.prompt` access |
+| `domain.extraction.examples` | First `.examples` access |
+| `domain.schema` | First `.schema` access |
 
-### 3. Overriding at Runtime (via CLI)
-The Typer CLI uses composable subcommands:
+**Error handling:** If JSON is malformed or doesn't match the Pydantic model, a `DomainResourceError` is raised with the file path and error details.
 
+---
+
+## CLI Input/Output Formats
+
+### Input (JSONL recommended)
+```jsonl
+{"id": "doc_001", "text": "The plaintiff filed a lawsuit..."}
+{"id": "doc_002", "text": "The defendant responded..."}
+```
+
+### Output (per-document JSON)
+```
+outputs/kg_extraction/extracted_json/
+├── doc_001.json   # Array of Triple objects
+├── doc_002.json
+```
+
+### CLI Commands
 ```bash
-# Step 1: Extract triples from text
-python -m src.extract_cli extract --csv data.csv --domain legal
+# Extract (Step 1)
+python -m src.extract_cli extract --input data.jsonl --domain my_domain
 
-# Step 2: Augment with connectivity strategy
-python -m src.extract_cli augment connectivity --csv data.csv
+# Augment connectivity (Step 2)
+python -m src.extract_cli augment connectivity --input data.jsonl --domain my_domain
 
-# Full pipeline = run both commands in sequence
-python -m src.extract_cli extract --csv data.csv --domain legal
-python -m src.extract_cli augment connectivity --csv data.csv --max-disconnected 1
+# Key options:
+#   --max-disconnected N   Target max disconnected components (default: 3)
+#   --max-iterations N     Max augmentation iterations (default: 2)
+#   --mode constrained     Use prompt_constrained.txt + schema.json
 ```
 
-Future augmentation strategies can be added as new subcommands under `augment`.
+---
 
+## Adding New Augmentation Strategies
 
+To add a new strategy (e.g., `enrichment`):
 
-## Validation Guardrails
-The system uses **Pydantic** models defined in `src/domains/models.py`. Any JSON examples will be validated during the first access to `domain.examples`. If the JSON structure is incorrect, a descriptive validation error will be raised.
+1. Create folder: `src/domains/<domain>/augmentation/enrichment/`
+2. Add `prompt.txt` and `examples.json`
+3. Add CLI subcommand in `src/extract_cli.py`:
+```python
+@augment_app.command("enrichment")
+def augment_enrichment(...):
+    ...
+```
+4. Use: `python -m src.extract_cli augment enrichment --input data.jsonl --domain my_domain`
+
+---
+
+## Error Handling
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `DomainResourceError: Resource not found` | Missing prompt/examples file | Check file path |
+| `DomainResourceError: Invalid JSON` | Malformed JSON | Fix syntax |
+| `ValidationError` | Examples don't match Pydantic model | Check schema in `models.py` |
+| `ValueError: Unknown domain` | Domain not registered | Add import to `__init__.py` |
