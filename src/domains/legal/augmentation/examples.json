@@ -1,0 +1,58 @@
+[
+    {
+        "input": {
+            "text": "Lord Hope delivered the judgment. The case concerned tax liability.",
+            "components": [
+                {
+                    "entities": [
+                        "Lord Hope",
+                        "judgment"
+                    ]
+                },
+                {
+                    "entities": [
+                        "case",
+                        "tax liability"
+                    ]
+                }
+            ]
+        },
+        "output": [
+            {
+                "head": "judgment",
+                "relation": "relates_to",
+                "tail": "case",
+                "inference": "contextual",
+                "justification": "The judgment delivered by Lord Hope pertains to the case being discussed."
+            }
+        ]
+    },
+    {
+        "input": {
+            "text": "The appellant filed a motion. The court hearing was scheduled for March.",
+            "components": [
+                {
+                    "entities": [
+                        "appellant",
+                        "motion"
+                    ]
+                },
+                {
+                    "entities": [
+                        "court hearing",
+                        "March"
+                    ]
+                }
+            ]
+        },
+        "output": [
+            {
+                "head": "motion",
+                "relation": "subject_of",
+                "tail": "court hearing",
+                "inference": "contextual",
+                "justification": "The motion filed by the appellant would be addressed in the court hearing."
+            }
+        ]
+    }
+]

@@ -1,0 +1,30 @@
+[
+    {
+        "input": {
+            "text": "Steve Jobs founded Apple. The company is based in Cupertino.",
+            "components": [
+                {
+                    "entities": [
+                        "Steve Jobs",
+                        "Apple"
+                    ]
+                },
+                {
+                    "entities": [
+                        "company",
+                        "Cupertino"
+                    ]
+                }
+            ]
+        },
+        "output": [
+            {
+                "head": "Apple",
+                "relation": "is_referred_as",
+                "tail": "company",
+                "inference": "contextual",
+                "justification": "The text refers to Apple as 'the company' in the following sentence."
+            }
+        ]
+    }
+]

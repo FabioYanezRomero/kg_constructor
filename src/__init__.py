@@ -11,15 +11,10 @@ __all__ = [
     "EntityVisualizer",
     "ClientConfig",
     "ClientFactory",
-    # Client types
-    "GeminiClient",
-    "OllamaClient",
-    "LMStudioClient",
-    # Examples
-    "ExampleSet",
-    "DefaultExamples",
-    "LegalExamples",
-    "get_examples",
+    # Domain Pattern
+    "get_domain",
+    "KnowledgeDomain",
+    "ExtractionMode",
 ]
 
 
@@ -51,27 +46,6 @@ def ClientFactory(*args: Any, **kwargs: Any) -> Any:
     return _impl(*args, **kwargs)
 
 
-def GeminiClient(*args: Any, **kwargs: Any) -> Any:
-    """Create a Gemini API client."""
-    from .clients import GeminiClient as _impl
-
-    return _impl(*args, **kwargs)
-
-
-def OllamaClient(*args: Any, **kwargs: Any) -> Any:
-    """Create an Ollama client."""
-    from .clients import OllamaClient as _impl
-
-    return _impl(*args, **kwargs)
-
-
-def LMStudioClient(*args: Any, **kwargs: Any) -> Any:
-    """Create an LM Studio client."""
-    from .clients import LMStudioClient as _impl
-
-    return _impl(*args, **kwargs)
-
-
 def EntityVisualizer(*args: Any, **kwargs: Any) -> Any:
     """Create an entity visualizer for highlighting entities in text."""
     from .visualizer import EntityVisualizer as _impl
@@ -79,29 +53,19 @@ def EntityVisualizer(*args: Any, **kwargs: Any) -> Any:
     return _impl(*args, **kwargs)
 
 
-def ExampleSet(*args: Any, **kwargs: Any) -> Any:
-    """Base class for example sets."""
-    from .examples import ExampleSet as _impl
-
+def get_domain(*args: Any, **kwargs: Any) -> Any:
+    """Get a knowledge domain by name."""
+    from .domains import get_domain as _impl
     return _impl(*args, **kwargs)
 
 
-def DefaultExamples(*args: Any, **kwargs: Any) -> Any:
-    """Get default examples for general-purpose extraction."""
-    from .examples import DefaultExamples as _impl
-
-    return _impl(*args, **kwargs)
-
-
-def LegalExamples(*args: Any, **kwargs: Any) -> Any:
-    """Get legal domain examples."""
-    from .examples import LegalExamples as _impl
-
-    return _impl(*args, **kwargs)
+def KnowledgeDomain(*args: Any, **kwargs: Any) -> Any:
+    """Base class for knowledge domains."""
+    from .domains import KnowledgeDomain as _impl
+    return _impl
 
 
-def get_examples(*args: Any, **kwargs: Any) -> Any:
-    """Get examples by domain name (default, legal, etc.)."""
-    from .examples import get_examples as _impl
-
-    return _impl(*args, **kwargs)
+def ExtractionMode(*args: Any, **kwargs: Any) -> Any:
+    """Enum for extraction modes."""
+    from .domains import ExtractionMode as _impl
+    return _impl

@@ -137,12 +137,25 @@ Environment Variables:
         help="Request timeout in seconds for local servers (default: 120)"
     )
 
-    # Prompt configuration
+    # Domain configuration
+    parser.add_argument(
+        "--domain",
+        type=str,
+        default="default",
+        help="Knowledge domain to use (default: default)"
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["open", "constrained"],
+        default="open",
+        help="Extraction mode: open (all facts) or constrained (domain-specific) (default: open)"
+    )
     parser.add_argument(
         "--prompt",
         type=Path,
         default=None,
-        help="Path to prompt template file (default: src/prompts/default_prompt.txt)"
+        help="Optional override for extraction prompt template file"
     )
 
     # Pipeline options
@@ -201,6 +214,8 @@ Environment Variables:
         pipeline = ExtractionPipeline(
             output_dir=args.output_dir,
             client_config=client_config,
+            domain=args.domain,
+            extraction_mode=args.mode,
             prompt_path=args.prompt
         )
     except Exception as e:

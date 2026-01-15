@@ -9,6 +9,7 @@ from typing import Any
 from .clients import BaseLLMClient, ClientConfig, ClientFactory
 from .extractor import KnowledgeGraphExtractor
 from .visualizer import EntityVisualizer
+from .domains import KnowledgeDomain
 
 
 class ExtractionPipeline:
@@ -25,6 +26,9 @@ class ExtractionPipeline:
         output_dir: Path,
         client: BaseLLMClient | None = None,
         client_config: ClientConfig | None = None,
+        domain: KnowledgeDomain | str | None = None,
+        extraction_mode: str = "open",
+        # Overrides
         prompt_path: Path | str | None = None,
         bridging_prompt_path: Path | str | None = None,
         enable_entity_viz: bool = True
@@ -35,8 +39,10 @@ class ExtractionPipeline:
             output_dir: Directory to save all outputs
             client: Pre-configured LLM client (takes precedence)
             client_config: Configuration for creating a client
-            prompt_path: Path to prompt template file for initial extraction
-            bridging_prompt_path: Path to prompt template for bridging/refinement (optional)
+            domain: KnowledgeDomain instance or domain name
+            extraction_mode: 'open' or 'constrained'
+            prompt_path: Optional override for extraction prompt file
+            bridging_prompt_path: Optional override for bridging prompt file
             enable_entity_viz: Whether to create entity highlighting visualizations
         """
         self.output_dir = Path(output_dir)
@@ -46,6 +52,8 @@ class ExtractionPipeline:
         self.extractor = KnowledgeGraphExtractor(
             client=client,
             client_config=client_config,
+            domain=domain,
+            extraction_mode=extraction_mode,
             prompt_path=prompt_path,
             bridging_prompt_path=bridging_prompt_path
         )

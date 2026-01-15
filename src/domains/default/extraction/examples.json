@@ -1,0 +1,31 @@
+[
+    {
+        "text": "Google was founded by Larry Page and Sergey Brin.",
+        "extractions": [
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "Google was founded by Larry Page",
+                "char_start": 0,
+                "char_end": 31,
+                "attributes": {
+                    "head": "Google",
+                    "relation": "founded_by",
+                    "tail": "Larry Page",
+                    "inference": "explicit"
+                }
+            },
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "founded by ... Sergey Brin",
+                "char_start": 11,
+                "char_end": 49,
+                "attributes": {
+                    "head": "Google",
+                    "relation": "founded_by",
+                    "tail": "Sergey Brin",
+                    "inference": "explicit"
+                }
+            }
+        ]
+    }
+]

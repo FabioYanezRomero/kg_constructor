@@ -1,0 +1,34 @@
+{
+    "entity_types": [
+        "Legal party",
+        "Organization",
+        "Legal instrument",
+        "Obligation",
+        "Event",
+        "Date",
+        "Monetary amount",
+        "Location",
+        "Legal concept"
+    ],
+    "relation_types": [
+        "is_type_of",
+        "part_of",
+        "belongs_to",
+        "filed_against",
+        "represented_by",
+        "governed_by",
+        "breached",
+        "enforced",
+        "occurred_on",
+        "preceded",
+        "followed",
+        "caused",
+        "resulted_in",
+        "led_to",
+        "owned_by",
+        "possessed_by",
+        "involved_in",
+        "party_to",
+        "signed_by"
+    ]
+}

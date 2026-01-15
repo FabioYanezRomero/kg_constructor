@@ -10,22 +10,9 @@ import langextract as lx
 from pydantic import BaseModel, Field
 
 from .clients import BaseLLMClient, ClientConfig, ClientFactory
-from .examples import ExampleSet, get_examples
+from .domains import get_domain, KnowledgeDomain, ExtractionMode, Triple
 
 
-class Triple(BaseModel):
-    """A single knowledge graph triple (head, relation, tail)."""
-
-    head: str = Field(description="The source entity in the relationship")
-    relation: str = Field(description="The relationship type connecting head to tail")
-    tail: str = Field(description="The target entity in the relationship")
-    inference: Literal["explicit", "contextual"] = Field(
-        description="MUST be 'explicit' if directly stated, or 'contextual' if inferred for connectivity."
-    )
-    justification: str | None = Field(
-        default=None,
-        description="REQUIRED for 'contextual' triples. Explain the logical link between entities."
-    )
 
 
 class KnowledgeGraphExtractor:
@@ -40,18 +27,21 @@ class KnowledgeGraphExtractor:
         self,
         client: BaseLLMClient | None = None,
         client_config: ClientConfig | None = None,
+        domain: KnowledgeDomain | str | None = None,
+        extraction_mode: str = "open",
+        # Keep for backward compatibility overrides
         prompt_path: Path | str | None = None,
         bridging_prompt_path: Path | str | None = None,
-        examples: ExampleSet | str | None = None
     ) -> None:
         """Initialize the extractor.
 
         Args:
             client: Pre-configured client instance (takes precedence)
             client_config: Configuration for creating a client
-            prompt_path: Path to prompt template file for initial extraction (default: prompts/default_prompt.txt)
-            bridging_prompt_path: Path to prompt template for bridging/refinement (optional, uses hardcoded if not provided)
-            examples: ExampleSet instance or domain name (e.g., 'legal', 'default'). If None, uses 'default'.
+            domain: KnowledgeDomain instance or domain name (e.g., 'legal', 'default').
+            extraction_mode: 'open' or 'constrained' (default: 'open')
+            prompt_path: Optional override for extraction prompt file
+            bridging_prompt_path: Optional override for bridging prompt file
 
         Raises:
             ValueError: If neither client nor client_config is provided
@@ -65,33 +55,26 @@ class KnowledgeGraphExtractor:
             # Default to Gemini
             self.client = ClientFactory.create(ClientConfig(client_type="gemini"))
 
-        # Set up examples
-        if examples is None:
-            self._example_set = get_examples("default")
-        elif isinstance(examples, str):
-            self._example_set = get_examples(examples)
+        # Set up domain
+        if domain is None:
+            self.domain = get_domain("default", extraction_mode=extraction_mode)
+        elif isinstance(domain, str):
+            self.domain = get_domain(domain, extraction_mode=extraction_mode)
         else:
-            self._example_set = examples
+            self.domain = domain
 
-        # Load prompt template for initial extraction
-        if prompt_path is None:
-            # Default to the generic prompt (now inside kg_constructor)
-            prompt_path = Path(__file__).parent / "prompts" / "default_prompt.txt"
-        else:
-            prompt_path = Path(prompt_path)
-
-        if not prompt_path.exists():
-            raise FileNotFoundError(f"Prompt template not found: {prompt_path}")
-
-        self.prompt_template = prompt_path.read_text(encoding="utf-8")
-
-        # Load bridging prompt template (optional)
-        self.bridging_prompt_template = None
-        if bridging_prompt_path is not None:
-            bridging_prompt_path = Path(bridging_prompt_path)
-            if not bridging_prompt_path.exists():
-                raise FileNotFoundError(f"Bridging prompt template not found: {bridging_prompt_path}")
-            self.bridging_prompt_template = bridging_prompt_path.read_text(encoding="utf-8")
+        # Final prompts and examples (handling overrides)
+        self.prompt_template = self.domain.extraction.prompt
+        if prompt_path:
+            self.prompt_template = Path(prompt_path).read_text(encoding="utf-8")
+        
+        self.bridging_prompt_template = self.domain.augmentation.prompt
+        if bridging_prompt_path:
+            self.bridging_prompt_template = Path(bridging_prompt_path).read_text(encoding="utf-8")
+        
+        # Backward compatibility for example set
+        # (KnowledgeDomain implements the required methods)
+        self._example_set = self.domain
 
     def _prepare_prompt(self, record: dict[str, Any]) -> str:
         """Prepare the extraction prompt from template.
@@ -109,14 +92,14 @@ class KnowledgeGraphExtractor:
         )
         return prompt
 
-    def _create_examples(self) -> list[Any]:
+    def _create_examples(self) -> list[lx.data.ExampleData]:
         """Create few-shot examples for langextract extraction.
 
         Returns:
-            List of ExampleData with Triple schema attributes.
-            Uses the configured example set.
+            List of lx.data.ExampleData.
         """
-        return self._example_set.get_examples()
+        raw_examples = self.domain.get_extraction_examples()
+        return [lx.data.ExampleData(**ex) for ex in raw_examples]
 
     def get_examples_as_dict(self) -> list[dict[str, Any]]:
         """Export few-shot examples in JSON-serializable format.
@@ -124,7 +107,7 @@ class KnowledgeGraphExtractor:
         Returns:
             List of example dictionaries for saving to examples.json
         """
-        return self._example_set.get_examples_as_dict()
+        return self.domain.get_extraction_examples()
 
     def _get_extraction_prompt_description(self) -> str:
         """Get the prompt description for triple extraction.
