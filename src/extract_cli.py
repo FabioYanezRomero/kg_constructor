@@ -99,7 +99,7 @@ def _init_pipeline(
 def extract(
     csv: Path = typer.Option(..., "--csv", "-f", help="Path to input CSV file", exists=True, file_okay=True, dir_okay=False),
     output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory to save all outputs"),
-    domain: str = typer.Option("default", "--domain", "-d", help=f"Knowledge domain (Available: {', '.join(list_available_domains())})"),
+    domain: str = typer.Option(..., "--domain", "-d", help=f"Knowledge domain [required] (Available: {', '.join(list_available_domains())})"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode (open or constrained)"),
     client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c", help="LLM client type"),
     model: Optional[str] = typer.Option(None, "--model", help="Model ID (e.g., gemini-2.0-flash-exp, llama3.1)"),
@@ -171,7 +171,7 @@ def extract(
 def augment_connectivity(
     csv: Path = typer.Option(..., "--csv", "-f", help="Path to input CSV file", exists=True, file_okay=True, dir_okay=False),
     output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory containing extracted JSON files"),
-    domain: str = typer.Option("default", "--domain", "-d", help=f"Knowledge domain (Available: {', '.join(list_available_domains())})"),
+    domain: str = typer.Option(..., "--domain", "-d", help=f"Knowledge domain [required] (Available: {', '.join(list_available_domains())})"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode (open or constrained)"),
     client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c", help="LLM client type"),
     model: Optional[str] = typer.Option(None, "--model", help="Model ID"),

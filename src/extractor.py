@@ -10,7 +10,7 @@ import langextract as lx
 from pydantic import BaseModel, Field
 
 from .clients import BaseLLMClient, ClientConfig, ClientFactory
-from .domains import get_domain, KnowledgeDomain, ExtractionMode, Triple
+from .domains import get_domain, list_available_domains, KnowledgeDomain, ExtractionMode, Triple
 
 
 
@@ -57,9 +57,12 @@ class KnowledgeGraphExtractor:
             # Default to Gemini
             self.client = ClientFactory.create(ClientConfig(client_type="gemini"))
 
-        # Set up domain
+        # Set up domain (explicit domain required)
         if domain is None:
-            self.domain = get_domain("default", extraction_mode=extraction_mode)
+            raise ValueError(
+                "Domain must be specified. Available domains: " +
+                ", ".join(list_available_domains())
+            )
         elif isinstance(domain, str):
             self.domain = get_domain(domain, extraction_mode=extraction_mode)
         else:
