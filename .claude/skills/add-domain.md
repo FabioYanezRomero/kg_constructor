@@ -1,37 +1,73 @@
-# Adding a New Knowledge Domain
+# Adding a Knowledge Domain
 
-This skill documents how to add a new knowledge domain to the `src/domains` module.
+This skill documents how to add a new knowledge domain to `src/domains/`.
 
 ## Overview
 
-Domains are bundled resource sets that include prompts and few-shot examples for both extraction and augmentation. The domain system uses:
-1. A registry pattern with `@domain()` decorator
-2. Automatic resource discovery via `inspect.getfile()`
-3. Strategy-based augmentation folders
+Domains are bundled resource sets containing prompts and few-shot examples for extraction and augmentation. The system provides:
+- Registry pattern with `@domain()` decorator
+- Automatic resource discovery via `inspect.getfile()`
+- Strategy-based augmentation folders
 
-## File Structure
+## Architecture
 
 ```
+                          Domains Module
+    ┌───────────────────────────────────────────────────────────┐
+    │                                                           │
+    │  registry.py                base.py                       │
+    │  ├─ @domain()               ├─ KnowledgeDomain            │
+    │  ├─ register_domain()       ├─ DomainResourceError        │
+    │  ├─ get_domain()            └─ ExtractionResources        │
+    │  └─ list_available_domains()                              │
+    │                                                           │
+    │  legal/                     default/                      │
+    │  ├─ __init__.py             ├─ __init__.py                │
+    │  ├─ extraction/             ├─ extraction/                │
+    │  └─ augmentation/           └─ augmentation/              │
+    │                                                           │
+    └───────────────────────────────────────────────────────────┘
+
+Registration Flow:
+  @domain("name") → register_domain() → _DOMAIN_REGISTRY → get_domain()
+```
+
+## Dependencies
+
+| Component | Library | Purpose |
+|-----------|---------|---------|
+| Schema validation | `pydantic>=2.0` | Triple validation |
+| Extraction | `langextract>=0.1` | Prompt framework |
+| Resource loading | `pathlib` (stdlib) | File operations |
+
+## Directory Structure
+
+```text
 src/domains/<domain_name>/
 ├── __init__.py                 # Domain class with @domain decorator
 ├── extraction/
 │   ├── prompt_open.txt         # Open extraction prompt
-│   ├── prompt_constrained.txt  # Constrained extraction prompt
+│   ├── prompt_constrained.txt  # Type-constrained extraction prompt
 │   └── examples.json           # Few-shot extraction examples
 ├── augmentation/
-│   └── connectivity/           # Strategy folder (matches CLI)
+│   └── connectivity/           # Strategy folder
 │       ├── prompt.txt
 │       └── examples.json
-└── schema.json                 # Optional: entity/relation type constraints
+└── schema.json                 # Optional: type constraints
 ```
 
 ## Step 1: Create Resource Files
 
 ### Extraction Prompts
 
-Create `extraction/prompt_open.txt` and `extraction/prompt_constrained.txt` as plain text.
+Create `extraction/prompt_open.txt`:
 
-> **IMPORTANT:** Do NOT include format instructions (e.g., "Return JSON...") in prompts. The `langextract` framework generates format instructions from examples.
+```text
+Extract all knowledge graph triples from the following text.
+Focus on explicit relationships between entities.
+```
+
+> **Important:** Do NOT include output format instructions. The `langextract` framework generates format instructions from examples.
 
 ### Extraction Examples (`extraction/examples.json`)
 
@@ -57,175 +93,200 @@ Create `extraction/prompt_open.txt` and `extraction/prompt_constrained.txt` as p
 ]
 ```
 
-### Augmentation Resources
+### Augmentation Examples (`augmentation/connectivity/examples.json`)
 
-Create `augmentation/connectivity/prompt.txt` and `augmentation/connectivity/examples.json`.
+```json
+[
+  {
+    "input": {
+      "text": "Alice knows Bob. Bob works at Acme.",
+      "components": [
+        {"entities": ["Alice", "Bob"]},
+        {"entities": ["Bob", "Acme"]}
+      ]
+    },
+    "output": [
+      {
+        "head": "Alice",
+        "relation": "connected_to",
+        "tail": "Acme",
+        "inference": "contextual",
+        "justification": "Alice is connected to Acme through Bob."
+      }
+    ]
+  }
+]
+```
 
-## Step 2: Create Domain Class
+## Step 2: Implement the Domain Class
 
-Create `src/domains/<domain_name>/__init__.py`:
+Create `src/domains/medical/__init__.py`:
 
 ```python
+"""Medical knowledge domain for clinical document analysis."""
+
+from __future__ import annotations
 from ..base import KnowledgeDomain
 from ..registry import domain
 
-@domain("my_domain")  # This ID is used with --domain CLI flag
-class MyDomain(KnowledgeDomain):
-    """Description of the domain."""
+
+@domain("medical")  # This ID is used with --domain CLI flag
+class MedicalDomain(KnowledgeDomain):
+    """Domain for medical and clinical document analysis.
+    
+    Focuses on:
+    - Medical entities (drugs, diseases, symptoms)
+    - Clinical relationships (treats, causes, indicates)
+    """
     pass
 
-__all__ = ["MyDomain"]
+
+__all__ = ["MedicalDomain"]
 ```
 
-The `@domain()` decorator registers the class when the module is imported.
+### How the Decorator Works
+
+```python
+# The @domain decorator calls register_domain():
+def domain(name: str):
+    def decorator(cls):
+        register_domain(name, cls)  # Adds to _DOMAIN_REGISTRY
+        return cls
+    return decorator
+```
 
 ## Step 3: Add Schema (Optional)
 
-Create `schema.json` for constrained extraction:
+Create `schema.json`:
 
 ```json
 {
-  "entity_types": ["Person", "Company", "Drug"],
-  "relation_types": ["works_for", "developed", "treats"]
+  "entity_types": ["Drug", "Disease", "Symptom"],
+  "relation_types": ["treats", "causes", "indicates"]
 }
 ```
 
-Access via: `domain.schema.entity_types`, `domain.schema.relation_types`
+Access with: `domain.schema.entity_types`, `domain.schema.relation_types`
 
 ## Step 4: Register in Domain Hub
 
 Update `src/domains/__init__.py`:
 
 ```python
-from . import my_domain  # This import triggers @domain decorator
+from . import medical  # Triggers @domain decorator
 ```
 
 ## Step 5: Verify
 
-```python
-from src.domains import get_domain, list_available_domains
+### Check Registration
 
-assert "my_domain" in list_available_domains()
-
-domain = get_domain("my_domain")
-print(domain.extraction.prompt[:100])
-print(domain.get_augmentation("connectivity").prompt[:100])
+```bash
+python -c "from src.domains import list_available_domains; print(list_available_domains())"
 ```
 
-## How Auto-Discovery Works
+### Unit Tests
 
-The `KnowledgeDomain` base class locates resources using:
+```python
+import pytest
+from src.domains import get_domain, list_available_domains, DomainResourceError
+
+
+def test_domain_registered():
+    assert "medical" in list_available_domains()
+
+
+def test_extraction_prompt_loads():
+    domain = get_domain("medical")
+    assert len(domain.extraction.prompt) > 50
+
+
+def test_extraction_examples_valid():
+    domain = get_domain("medical")
+    examples = domain.extraction.examples
+    assert isinstance(examples, list)
+    assert "text" in examples[0]
+
+
+def test_augmentation_strategy_exists():
+    domain = get_domain("medical")
+    assert "connectivity" in domain.list_augmentation_strategies()
+    
+    conn = domain.get_augmentation("connectivity")
+    assert len(conn.prompt) > 0
+
+
+def test_root_dir_override(tmp_path):
+    (tmp_path / "extraction").mkdir()
+    (tmp_path / "extraction" / "prompt_open.txt").write_text("Test")
+    (tmp_path / "extraction" / "examples.json").write_text("[]")
+    
+    from src.domains.base import KnowledgeDomain
+    domain = KnowledgeDomain(root_dir=tmp_path)
+    assert domain.extraction.prompt == "Test"
+
+
+def test_missing_resource_error(tmp_path):
+    from src.domains.base import KnowledgeDomain
+    domain = KnowledgeDomain(root_dir=tmp_path)
+    
+    with pytest.raises(DomainResourceError):
+        _ = domain.extraction.prompt
+```
+
+## Auto-Discovery
+
+The `KnowledgeDomain` base class uses `inspect.getfile()`:
 
 ```python
 self._root_dir = Path(inspect.getfile(self.__class__)).parent
 ```
 
-This means:
 - No manual path configuration needed
-- Works regardless of where the package is installed
-- Override with `root_dir=` parameter if needed
-
-## Validation Timing
-
-Resources are validated **on first access** (lazy loading):
-
-| Resource | Validated When |
-|----------|----------------|
-| `domain.extraction.prompt` | First `.prompt` access |
-| `domain.extraction.examples` | First `.examples` access |
-| `domain.schema` | First `.schema` access |
-
-Errors raise `DomainResourceError` with file path and details.
+- Override with `root_dir=` for testing
 
 ## CLI Usage
 
 ```bash
 # Extract with your domain
-python -m src.extract_cli extract --input data.jsonl --domain my_domain
+python -m src extract --input data.jsonl --domain medical
 
-# Augment with connectivity strategy
-python -m src.extract_cli augment connectivity --input data.jsonl --domain my_domain
+# Augment with connectivity
+python -m src augment connectivity --input data.jsonl --domain medical
 ```
 
-## Adding New Augmentation Strategies
+## Troubleshooting
 
-Strategy folders are **NOT auto-discovered** for CLI. You must:
+### "DomainResourceError: Resource not found"
+- Verify file exists: `ls src/domains/medical/extraction/`
+- Check filename matches exactly (case-sensitive)
 
-1. Create folder: `augmentation/<strategy_name>/`
-2. Add `prompt.txt` and `examples.json`
-3. Add CLI subcommand in `src/extract_cli.py`:
-```python
-@augment_app.command("strategy_name")
-def augment_strategy_name(...):
-    ...
-```
+### "ValueError: Unknown domain 'medical'"
+- Add import in `src/domains/__init__.py`: `from . import medical`
+- Restart Python interpreter
 
-> **Note:** The domain's `list_augmentation_strategies()` method auto-discovers folders, but CLI subcommands require manual registration.
-
-## Testing Your Domain
-
-```python
-import pytest
-from pathlib import Path
-from src.domains import get_domain
-
-def test_domain_registration():
-    """Verify domain is registered."""
-    from src.domains import list_available_domains
-    assert "my_domain" in list_available_domains()
-
-def test_extraction_resources():
-    """Verify extraction resources load correctly."""
-    domain = get_domain("my_domain")
-    assert len(domain.extraction.prompt) > 0
-    assert isinstance(domain.extraction.examples, list)
-
-def test_augmentation_strategy():
-    """Verify augmentation strategy resources load."""
-    domain = get_domain("my_domain")
-    strategies = domain.list_augmentation_strategies()
-    assert "connectivity" in strategies
-    
-    conn = domain.get_augmentation("connectivity")
-    assert len(conn.prompt) > 0
-
-def test_with_override_root(tmp_path):
-    """Test with temporary resource directory."""
-    # Create minimal resources
-    (tmp_path / "extraction").mkdir()
-    (tmp_path / "extraction" / "prompt_open.txt").write_text("Test prompt")
-    (tmp_path / "extraction" / "examples.json").write_text("[]")
-    
-    from src.domains.base import KnowledgeDomain
-    domain = KnowledgeDomain(root_dir=tmp_path)
-    assert domain.extraction.prompt == "Test prompt"
-```
-
-## Root Directory Override
-
-Use `root_dir=` when:
-- Testing with temporary resources
-- Loading resources from non-standard locations
-- Sharing resources between multiple domains
-
-```python
-from pathlib import Path
-from src.domains.base import KnowledgeDomain
-
-# Testing with mock resources
-domain = KnowledgeDomain(root_dir=Path("/tmp/test_resources"))
-
-# Using shared resource directory
-domain = MyDomain(root_dir=Path("src/domains/shared_legal"))
-```
+### "ValidationError: examples[0]..."
+- Check `examples.json` matches ExtractionExample schema
+- Validate JSON: `python -m json.tool examples.json`
 
 ## Error Handling
 
-Errors are raised **on first access** (lazy loading), not at registration time:
+```python
+from src.domains import get_domain, DomainResourceError
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `DomainResourceError: Resource not found` | Missing file | Check path |
-| `DomainResourceError: Invalid JSON` | Malformed JSON | Fix syntax |
-| `ValueError: Unknown domain` | Not registered | Add import to `__init__.py` |
-| `ValidationError` | Examples don't match model | Check `models.py` schema |
+try:
+    domain = get_domain("medical")
+    prompt = domain.extraction.prompt
+except DomainResourceError as e:
+    print(f"Resource error: {e} (file: {e.path})")
+except ValueError as e:
+    print(f"Domain not found: {e}")
+```
+
+## Verification Checklist
+
+- [ ] Directory structure matches expected layout
+- [ ] `@domain("name")` decorator applied
+- [ ] Prompts do NOT include format instructions
+- [ ] `examples.json` matches ExtractionExample schema
+- [ ] Import added in `src/domains/__init__.py`
+- [ ] Tests pass for registration and resources
