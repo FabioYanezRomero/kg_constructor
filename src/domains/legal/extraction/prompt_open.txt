@@ -1,0 +1,13 @@
+Extract all knowledge graph triples from the given text.
+
+Your goal is comprehensive extraction of all explicit relationships, facts, and connections stated in the text. Capture everything - do not limit yourself to predefined categories.
+
+Guidelines:
+- Extract entities and relations exactly as stated in the text
+- Use exact text spans - do not paraphrase
+- Be exhaustive: capture every relationship you can identify
+- Split complex statements into atomic triples
+- Include all entity types: people, organizations, concepts, events, attributes, values
+- Include all relation types: actions, properties, associations, temporal, causal, hierarchical
+
+Focus on explicit information only - extract what is directly stated, not inferred.

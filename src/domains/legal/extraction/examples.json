@@ -1,0 +1,89 @@
+[
+    {
+        "text": "Morrison & Foerster LLP represents the appellant, Smith Holdings Inc.",
+        "extractions": [
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "Morrison & Foerster LLP represents the appellant",
+                "char_start": 0,
+                "char_end": 48,
+                "attributes": {
+                    "head": "Morrison & Foerster LLP",
+                    "relation": "represents",
+                    "tail": "appellant",
+                    "inference": "explicit"
+                }
+            },
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "appellant, Smith Holdings Inc.",
+                "char_start": 39,
+                "char_end": 69,
+                "attributes": {
+                    "head": "Smith Holdings Inc.",
+                    "relation": "is_party_as",
+                    "tail": "appellant",
+                    "inference": "explicit"
+                }
+            }
+        ]
+    },
+    {
+        "text": "The UK Supreme Court affirmed the decision of the Court of Appeal.",
+        "extractions": [
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "UK Supreme Court affirmed the decision of the Court of Appeal",
+                "char_start": 4,
+                "char_end": 65,
+                "attributes": {
+                    "head": "UK Supreme Court",
+                    "relation": "affirmed_decision_of",
+                    "tail": "Court of Appeal",
+                    "inference": "explicit"
+                }
+            },
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "UK Supreme Court",
+                "char_start": 4,
+                "char_end": 20,
+                "attributes": {
+                    "head": "UK Supreme Court",
+                    "relation": "is_type",
+                    "tail": "court",
+                    "inference": "explicit"
+                }
+            }
+        ]
+    },
+    {
+        "text": "The claimant alleged breach of contract. The court ruled in favor of the defendant.",
+        "extractions": [
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "claimant alleged breach of contract",
+                "char_start": 4,
+                "char_end": 39,
+                "attributes": {
+                    "head": "claimant",
+                    "relation": "alleged",
+                    "tail": "breach of contract",
+                    "inference": "explicit"
+                }
+            },
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "court ruled in favor of the defendant",
+                "char_start": 45,
+                "char_end": 82,
+                "attributes": {
+                    "head": "court",
+                    "relation": "ruled_in_favor_of",
+                    "tail": "defendant",
+                    "inference": "explicit"
+                }
+            }
+        ]
+    }
+]
