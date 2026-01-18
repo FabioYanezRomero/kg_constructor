@@ -15,10 +15,20 @@ Commands:
 
 from __future__ import annotations
 
+# Suppress absl warnings (e.g., langextract prompt alignment warnings)
+import os
+os.environ["ABSL_LOGGING_LEVEL"] = "ERROR"
+import absl.logging
+absl.logging.set_verbosity(absl.logging.ERROR)
+
 import json
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Any
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 import typer
 from rich.console import Console

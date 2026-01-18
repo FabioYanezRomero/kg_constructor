@@ -137,6 +137,8 @@ class GeminiClient(BaseLLMClient):
             return triples
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             raise LLMClientError(f"Langextract extraction failed: {e}") from e
 
     def generate_json(
@@ -222,11 +224,37 @@ Input Text:
         """Convert a langextract Extraction to a triple dictionary.
 
         Args:
-            extraction: langextract Extraction object
+            extraction: langextract Extraction object or dict
 
         Returns:
             Dictionary with triple fields + source grounding
         """
+        # Handle cases where extraction is a dict (some langextract versions/configs)
+        if isinstance(extraction, dict):
+            # Access attributes from dict
+            attrs = extraction.get("attributes", {})
+            triple = dict(attrs) if attrs else {}
+            
+            # Add source grounding information
+            char_interval = extraction.get("char_interval")
+            if char_interval:
+                # char_interval might also be a dict or object
+                if isinstance(char_interval, dict):
+                    triple["char_start"] = char_interval.get("start_pos")
+                    triple["char_end"] = char_interval.get("end_pos")
+                else:
+                    triple["char_start"] = char_interval.start_pos
+                    triple["char_end"] = char_interval.end_pos
+            else:
+                triple["char_start"] = None
+                triple["char_end"] = None
+            
+            triple["extraction_text"] = extraction.get("extraction_text")
+            triple["extraction_class"] = extraction.get("extraction_class")
+            
+            return triple
+
+        # Standard object access
         # Start with attributes (contains head, relation, tail, etc.)
         triple = dict(extraction.attributes) if extraction.attributes else {}
 

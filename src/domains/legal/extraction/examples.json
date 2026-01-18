@@ -1,6 +1,6 @@
 [
     {
-        "text": "Morrison & Foerster LLP represents the appellant, Smith Holdings Inc.",
+        "text": "Morrison & Foerster LLP represents the appellant, Smith Holdings Inc. The firm filed a motion on their behalf.",
         "extractions": [
             {
                 "extraction_class": "Triple",
@@ -10,14 +10,14 @@
                 "attributes": {
                     "head": "Morrison & Foerster LLP",
                     "relation": "represents",
-                    "tail": "appellant",
+                    "tail": "Smith Holdings Inc.",
                     "inference": "explicit"
                 }
             },
             {
                 "extraction_class": "Triple",
-                "extraction_text": "appellant, Smith Holdings Inc.",
-                "char_start": 39,
+                "extraction_text": "Smith Holdings Inc.",
+                "char_start": 50,
                 "char_end": 69,
                 "attributes": {
                     "head": "Smith Holdings Inc.",
@@ -25,11 +25,23 @@
                     "tail": "appellant",
                     "inference": "explicit"
                 }
+            },
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "The firm filed a motion on their behalf",
+                "char_start": 71,
+                "char_end": 110,
+                "attributes": {
+                    "head": "Morrison & Foerster LLP",
+                    "relation": "filed",
+                    "tail": "motion",
+                    "inference": "explicit"
+                }
             }
         ]
     },
     {
-        "text": "The UK Supreme Court affirmed the decision of the Court of Appeal.",
+        "text": "The UK Supreme Court affirmed the decision of the Court of Appeal. It held that the lower court's reasoning was correct.",
         "extractions": [
             {
                 "extraction_class": "Triple",
@@ -38,35 +50,76 @@
                 "char_end": 65,
                 "attributes": {
                     "head": "UK Supreme Court",
-                    "relation": "affirmed_decision_of",
+                    "relation": "affirmed decision of",
                     "tail": "Court of Appeal",
                     "inference": "explicit"
                 }
             },
             {
                 "extraction_class": "Triple",
-                "extraction_text": "UK Supreme Court",
-                "char_start": 4,
-                "char_end": 20,
+                "extraction_text": "It held that the lower court's reasoning was correct",
+                "char_start": 67,
+                "char_end": 119,
                 "attributes": {
                     "head": "UK Supreme Court",
-                    "relation": "is_type",
-                    "tail": "court",
+                    "relation": "held",
+                    "tail": "Court of Appeal reasoning was correct",
                     "inference": "explicit"
                 }
             }
         ]
     },
     {
-        "text": "The claimant alleged breach of contract. The court ruled in favor of the defendant.",
+        "text": "Mr Norris is a US citizen. He was convicted of obstruction of justice. His extradition was sought by the US Government.",
         "extractions": [
             {
                 "extraction_class": "Triple",
-                "extraction_text": "claimant alleged breach of contract",
-                "char_start": 4,
-                "char_end": 39,
+                "extraction_text": "Mr Norris is a US citizen",
+                "char_start": 0,
+                "char_end": 25,
                 "attributes": {
-                    "head": "claimant",
+                    "head": "Mr Norris",
+                    "relation": "is citizen of",
+                    "tail": "United States",
+                    "inference": "explicit"
+                }
+            },
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "He was convicted of obstruction of justice",
+                "char_start": 27,
+                "char_end": 69,
+                "attributes": {
+                    "head": "Mr Norris",
+                    "relation": "convicted of",
+                    "tail": "obstruction of justice",
+                    "inference": "explicit"
+                }
+            },
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "His extradition was sought by the US Government",
+                "char_start": 71,
+                "char_end": 118,
+                "attributes": {
+                    "head": "US Government",
+                    "relation": "sought extradition of",
+                    "tail": "Mr Norris",
+                    "inference": "explicit"
+                }
+            }
+        ]
+    },
+    {
+        "text": "The claimant, Mrs Johnson, alleged breach of contract. The court ruled in her favor.",
+        "extractions": [
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "The claimant, Mrs Johnson, alleged breach of contract",
+                "char_start": 0,
+                "char_end": 53,
+                "attributes": {
+                    "head": "Mrs Johnson",
                     "relation": "alleged",
                     "tail": "breach of contract",
                     "inference": "explicit"
@@ -74,13 +127,25 @@
             },
             {
                 "extraction_class": "Triple",
-                "extraction_text": "court ruled in favor of the defendant",
-                "char_start": 45,
-                "char_end": 82,
+                "extraction_text": "Mrs Johnson",
+                "char_start": 14,
+                "char_end": 25,
+                "attributes": {
+                    "head": "Mrs Johnson",
+                    "relation": "is_party_as",
+                    "tail": "claimant",
+                    "inference": "explicit"
+                }
+            },
+            {
+                "extraction_class": "Triple",
+                "extraction_text": "The court ruled in her favor",
+                "char_start": 55,
+                "char_end": 83,
                 "attributes": {
                     "head": "court",
-                    "relation": "ruled_in_favor_of",
-                    "tail": "defendant",
+                    "relation": "ruled in favor of",
+                    "tail": "Mrs Johnson",
                     "inference": "explicit"
                 }
             }

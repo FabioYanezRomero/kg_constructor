@@ -2,375 +2,318 @@
 
 A modular system for extracting knowledge graphs from text using multiple LLM backends. Supports **Gemini API**, **Ollama**, and **LM Studio** with a unified client abstraction interface.
 
-## Features
+## ✨ Features
 
-- Clean client abstraction layer supporting multiple LLM backends
-- Support for Gemini API (cloud), Ollama (local), and LM Studio (local)
-- Flexible prompt templates from `src/prompts/`
-- Full GraphML export for NetworkX compatibility
-- Interactive HTML visualizations using Plotly
-- CSV and JSON input support
-- Batch processing with progress tracking
+### Core Capabilities
+- **Multi-Backend LLM Support**: Clean abstraction layer for Gemini API (cloud), Ollama (local), and LM Studio (local)
+- **Knowledge Graph Extraction**: Extract structured triples (head-relation-tail) from unstructured text
+- **Graph Augmentation**: Iterative refinement strategies to improve graph connectivity
+- **Multiple Export Formats**: GraphML (NetworkX compatible), JSON, with extensible converter system
+- **Interactive Visualizations**: Plotly-based network graphs and entity highlighting with dark mode support
 
-## Prerequisites
+### Data Handling
+- **Multiple Input Formats**: CSV, JSON, and JSONL file support with auto-detection
+- **Batch Processing**: Process large datasets with progress tracking
+- **Domain-Specific Extraction**: Customizable prompts and examples per knowledge domain
 
-- Python 3.11+
-- **For Gemini**: API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-- **For Ollama**: [Ollama](https://ollama.ai/) installed and running locally
-- **For LM Studio**: [LM Studio](https://lmstudio.ai/) server running with a loaded model
-- langextract library (included in requirements)
+---
 
-## Quick Start
+## 🚀 Quick Start
 
-### Gemini API (Cloud)
-```bash
-# Set API key
-export LANGEXTRACT_API_KEY="your-gemini-api-key"
-
-# Extract knowledge graphs
-python -m kg_constructor.extract_cli \
-  --client gemini \
-  --csv data/legal/sample_data.csv \
-  --output-dir outputs/results \
-  --limit 3
-```
-
-### Ollama (Local)
-```bash
-# Ensure Ollama is running locally
-python -m kg_constructor.extract_cli \
-  --client ollama \
-  --model llama3.1 \
-  --csv data/legal/sample_data.csv \
-  --limit 3
-```
-
-### LM Studio (Local)
-```bash
-# Ensure LM Studio server is running
-python -m kg_constructor.extract_cli \
-  --client lmstudio \
-  --model local-model \
-  --base-url http://localhost:1234/v1 \
-  --csv data/legal/sample_data.csv \
-  --limit 3
-```
-
-## Command-Line Usage
-
-### Gemini API
-```bash
-python -m kg_constructor.extract_cli \
-  --client gemini \
-  --model gemini-2.0-flash-exp \
-  --csv data/legal/sample_data.csv \
-  --output-dir outputs/gemini \
-  --prompt src/prompts/legal_background_prompt.txt \
-  --limit 10
-```
-
-### Ollama
-```bash
-python -m kg_constructor.extract_cli \
-  --client ollama \
-  --model llama3.1 \
-  --base-url http://localhost:11434 \
-  --csv data/legal/sample_data.csv \
-  --output-dir outputs/ollama \
-  --limit 10
-```
-
-### LM Studio
-```bash
-python -m kg_constructor.extract_cli \
-  --client lmstudio \
-  --model local-model \
-  --base-url http://localhost:1234/v1 \
-  --csv data/legal/sample_data.csv \
-  --output-dir outputs/lmstudio \
-  --limit 10
-```
-
-### CLI Options
-
-- `--client`: LLM backend to use (`gemini`, `ollama`, `lmstudio`)
-- `--model`: Model identifier (e.g., `gemini-2.0-flash-exp`, `llama3.1`)
-- `--csv`: Path to input CSV file
-- `--output-dir`: Directory for output files
-- `--prompt`: Path to prompt template (default: `src/prompts/default_prompt.txt`)
-- `--limit`: Maximum number of records to process
-- `--base-url`: Base URL for Ollama/LM Studio servers
-- `--api-key`: API key for Gemini (or use `LANGEXTRACT_API_KEY` env var)
-
-## Python API
-
-```python
-from pathlib import Path
-from kg_constructor.clients import ClientConfig
-from kg_constructor.extraction_pipeline import ExtractionPipeline
-
-# Configure client
-config = ClientConfig(
-    client_type="gemini",
-    model_id="gemini-2.0-flash-exp",
-    api_key="your-key"
-)
-
-# Create pipeline
-pipeline = ExtractionPipeline(
-    output_dir=Path("outputs/results"),
-    client_config=config,
-    prompt_path=Path("src/prompts/legal_background_prompt.txt")
-)
-
-# Run extraction
-results = pipeline.run_full_pipeline(
-    csv_path=Path("data/legal/sample_data.csv"),
-    limit=5
-)
-```
-
-### Using Different Clients
-
-```python
-# Gemini
-config = ClientConfig(client_type="gemini", api_key="your-key")
-
-# Ollama
-config = ClientConfig(
-    client_type="ollama",
-    model_id="llama3.1",
-    base_url="http://localhost:11434"
-)
-
-# LM Studio
-config = ClientConfig(
-    client_type="lmstudio",
-    model_id="local-model",
-    base_url="http://localhost:1234/v1"
-)
-```
-
-## Output Structure
-
-```
-outputs/results/
-├── extracted_json/       # Triples as JSON
-├── graphml/             # GraphML files (NetworkX compatible)
-└── visualizations/      # Interactive HTML (Plotly)
-```
-
-### JSON Format
-
-Each extracted record produces a JSON file with triples:
-
-```json
-{
-  "record_id": "row_000001",
-  "triples": [
-    {
-      "head": "Entity 1",
-      "relation": "relates to",
-      "tail": "Entity 2",
-      "inference": "explicit",
-      "justification": "Quote from text..."
-    }
-  ]
-}
-```
-
-### GraphML Format
-
-GraphML files can be loaded with NetworkX:
-
-```python
-import networkx as nx
-
-G = nx.read_graphml("outputs/results/graphml/row_000001.graphml")
-```
-
-### Visualizations
-
-Interactive HTML files with Plotly graphs showing:
-- Nodes as entities
-- Edges as relationships
-- Hover tooltips with metadata
-
-## Module Structure
-
-```
-src/kg_constructor/
-├── clients/                  # Client abstraction layer
-│   ├── __init__.py          # Exports
-│   ├── base.py              # BaseLLMClient interface
-│   ├── factory.py           # ClientConfig & create_client()
-│   ├── gemini_client.py     # Gemini API implementation
-│   ├── ollama_client.py     # Ollama implementation
-│   └── lmstudio_client.py   # LM Studio implementation
-│
-├── extractor.py             # KnowledgeGraphExtractor
-├── extraction_pipeline.py   # ExtractionPipeline
-├── extract_cli.py           # Unified CLI
-└── json_utils.py            # JSON parsing helpers
-```
-
-### Postprocessing Module
-
-```
-src/postprocessing/
-├── networkX/
-│   ├── convert_from_JSON.py  # JSON → GraphML converter
-│   └── visualisation.py      # Interactive HTML visualizations
-│
-└── legacy/                   # Legacy utilities
-    ├── networkx_export.py    # NetworkX export
-    ├── export_graphs.py      # Graph export utilities
-    ├── batch_graphs.py       # Batch processing
-    └── postprocess.py        # Post-processing utilities
-```
-
-### Prompt Templates
-
-```
-src/prompts/
-├── default_prompt.txt           # Generic extraction
-└── legal_background_prompt.txt  # Legal domain-specific
-```
-
-## Project Layout
-
-```
-├── README.md
-├── requirements.txt
-├── src/
-│   ├── kg_constructor/          # Main package
-│   ├── prompts/                 # Prompt templates
-│   └── postprocessing/          # Post-processing tools
-├── data/                        # Input data
-├── outputs/                     # Output files
-├── docs/                        # Documentation
-└── examples/                    # Working examples
-```
-
-## Architecture
-
-### Client Abstraction Layer
-
-All LLM backends implement the `BaseLLMClient` interface:
-
-```python
-from abc import ABC, abstractmethod
-
-class BaseLLMClient(ABC):
-    @abstractmethod
-    def extract(
-        self,
-        text: str,
-        prompt_description: str,
-        examples: list | None = None,
-        format_type: type | None = None,
-        temperature: float = 0.0,
-        **kwargs
-    ) -> list[dict]:
-        """Extract structured data from text."""
-        pass
-
-    @abstractmethod
-    def get_model_name(self) -> str:
-        """Return the model identifier."""
-        pass
-
-    @abstractmethod
-    def supports_structured_output(self) -> bool:
-        """Whether this client supports structured output."""
-        pass
-```
-
-### Factory Pattern
-
-The `create_client()` factory creates the appropriate client:
-
-```python
-from kg_constructor.clients import create_client, ClientConfig
-
-config = ClientConfig(client_type="gemini")
-client = create_client(config)  # Returns GeminiClient
-```
-
-### Pipeline Architecture
-
-1. **Extract**: `KnowledgeGraphExtractor` extracts triples from text using any LLM backend
-2. **Convert**: `convert_from_JSON` converts JSON triples to GraphML format
-3. **Visualize**: `batch_visualize_graphml` creates interactive HTML visualizations
-
-All components are fully decoupled and can be used independently.
-
-## Development
-
-### Install Dependencies
+### Installation
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Format Code
+### Prerequisites
+
+- Python 3.11+
+- **For Gemini**: API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+- **For Ollama**: [Ollama](https://ollama.ai/) installed and running locally
+- **For LM Studio**: [LM Studio](https://lmstudio.ai/) server running with a loaded model
+
+### Basic Usage
 
 ```bash
-make format
+# Extract with Gemini
+python -m src extract --input data.jsonl --domain legal --client gemini
+
+# Extract with Ollama
+python -m src extract --input data.jsonl --domain default --client ollama --model llama3.1
+
+# Extract with LM Studio
+python -m src extract --input data.csv --domain legal --client lmstudio --base-url http://localhost:1234/v1
 ```
 
-### Custom Prompts
+---
 
-Create custom prompt templates in `src/prompts/`:
+## 📋 Available Commands
 
-```text
-Extract entities and relationships from the following text:
+| Command | Description |
+|---------|-------------|
+| `extract` | Extract knowledge graph triples from text (Step 1) |
+| `augment connectivity` | Reduce disconnected graph components (Step 2) |
+| `convert` | Convert JSON triples to GraphML format |
+| `visualize network` | Create interactive network visualizations |
+| `visualize extraction` | Create text visualizations with entity highlights |
+| `list domains` | List available knowledge domains |
+| `list clients` | List available LLM client types |
 
-{{record_json}}
-
-Return a JSON list of triples with this format:
-[
-  {
-    "head": "Entity 1",
-    "relation": "relationship",
-    "tail": "Entity 2",
-    "inference": "explicit or contextual",
-    "justification": "supporting quote"
-  }
-]
-```
-
-Then use it:
+### Step 1: Extract
 
 ```bash
-python -m kg_constructor.extract_cli \
-  --prompt src/prompts/my_custom_prompt.txt \
-  --csv data/my_data.csv
+python -m src extract \
+  --input data.jsonl \
+  --domain legal \
+  --client gemini \
+  --output-dir outputs/kg_extraction \
+  --limit 10
 ```
 
-## Documentation
+**Options:**
+- `--input, -i`: Input file (JSONL, JSON, or CSV)
+- `--domain, -d`: Knowledge domain (default, legal)
+- `--client, -c`: LLM backend (gemini, ollama, lmstudio)
+- `--model`: Model identifier (optional, uses defaults)
+- `--output-dir, -o`: Output directory
+- `--text-field`: Field containing text (default: "text")
+- `--id-field`: Field for record IDs (default: "id")
+- `--limit`: Maximum records to process
+- `--temperature`: LLM temperature (default: 0.0)
+- `--workers`: Max parallel workers
+- `--timeout`: Request timeout in seconds
+
+### Step 2: Augment
+
+```bash
+python -m src augment connectivity \
+  --input data.jsonl \
+  --domain legal \
+  --client gemini \
+  --max-iterations 3
+```
+
+**Options:**
+- `--max-iterations`: Max refinement iterations (default: 3)
+- All extraction options apply
+
+### Convert
+
+```bash
+python -m src convert --input outputs/extracted_json --output outputs/graphml
+```
+
+### Visualize
+
+```bash
+# Network visualization
+python -m src visualize network --input outputs/graphml --dark-mode
+
+# Entity extraction visualization
+python -m src visualize extraction --input data.jsonl --triples outputs/extracted_json
+```
+
+---
+
+## 📁 Output Structure
+
+```
+outputs/kg_extraction/
+├── extracted_json/       # JSON triples with metadata
+├── graphml/              # NetworkX-compatible GraphML files
+└── visualizations/       # Interactive HTML visualizations
+```
+
+### JSON Triple Format
+
+```json
+{
+  "head": "Entity 1",
+  "relation": "relates to",
+  "tail": "Entity 2",
+  "inference": "explicit",
+  "char_start": 0,
+  "char_end": 25,
+  "extraction_text": "Entity 1 relates to Entity 2"
+}
+```
+
+---
+
+## 🔧 Architecture
+
+### Module Structure
+
+```
+src/
+├── __init__.py              # Package initialization
+├── __main__.py              # CLI entry point (Typer-based)
+├── builder/                 # Graph construction
+│   ├── extraction.py        # Initial triple extraction
+│   └── augmentation.py      # Augmentation strategies (connectivity, etc.)
+├── clients/                 # LLM client abstraction
+│   ├── base.py              # BaseLLMClient interface
+│   ├── config.py            # ClientConfig dataclass
+│   ├── factory.py           # ClientFactory for client creation
+│   └── providers/           # Provider implementations
+│       ├── gemini.py        # Gemini API client
+│       ├── ollama.py        # Ollama client
+│       └── lmstudio.py      # LM Studio client
+├── converters/              # Output format converters
+│   └── graphml.py           # JSON → GraphML converter
+├── datasets/                # Input format loaders
+│   └── __init__.py          # CSV, JSON, JSONL loaders
+├── domains/                 # Knowledge domain definitions
+│   ├── base.py              # KnowledgeDomain base class
+│   ├── registry.py          # Domain registration
+│   ├── models.py            # Triple, Example Pydantic models
+│   ├── default/             # Default domain resources
+│   └── legal/               # Legal domain resources
+└── visualization/           # Visualization engines
+    ├── network_viz.py       # Plotly network graphs
+    └── entity_viz.py        # Entity text highlighting
+```
+
+### Client Abstraction
+
+All LLM backends implement the `BaseLLMClient` interface:
+
+```python
+from src.clients import ClientFactory, ClientConfig
+
+config = ClientConfig(
+    client_type="gemini",
+    model_id="gemini-2.0-flash-exp",
+    api_key="your-key"
+)
+client = ClientFactory.create(config)
+
+result = client.extract(
+    text="Sample document text...",
+    prompt_description="Extract entities and relationships"
+)
+```
+
+### Domain System
+
+Domains define prompts and examples for specific knowledge areas:
+
+```python
+from src.domains import get_domain, list_available_domains
+
+# List available domains
+print(list_available_domains())  # ['default', 'legal']
+
+# Get domain with resources
+domain = get_domain("legal")
+prompt = domain.extraction.prompt
+examples = domain.extraction.examples
+```
+
+---
+
+## 🛠️ Extensibility (Agent Skills)
+
+This repository includes Claude agent skills for guided extensibility:
+
+| Skill | Description |
+|-------|-------------|
+| `add-llm-client` | Add new LLM provider (e.g., Anthropic, OpenAI, Groq) |
+| `add-domain` | Create new knowledge domain with prompts and examples |
+| `add-augmentation-strategy` | Add graph refinement strategy (e.g., enrichment, summarization) |
+| `add-converter` | Add output format converter (e.g., CSV, RDF, JSON-LD) |
+| `add-dataset-format` | Add input format loader (e.g., Parquet, Excel) |
+| `add-visualization` | Add visualization type (e.g., timeline, hierarchical) |
+
+### Skill Locations
+
+Skills are located in `.agent/skills/` and provide step-by-step guides with:
+- Architecture diagrams
+- Complete code implementations
+- CLI integration patterns
+- Unit and integration tests
+- Error handling reference
+
+---
+
+## 🗂️ Supported Domains
+
+| Domain | Description | Resources |
+|--------|-------------|-----------|
+| `default` | Generic entity-relationship extraction | Open/constrained prompts, examples |
+| `legal` | Legal document analysis | Legal-specific prompts, entity types |
+
+### Domain Structure
+
+```
+src/domains/<domain>/
+├── __init__.py                 # Domain class with @domain decorator
+├── extraction/
+│   ├── prompt_open.txt         # Open extraction prompt
+│   ├── prompt_constrained.txt  # Type-constrained extraction
+│   └── examples.json           # Few-shot examples
+├── augmentation/
+│   └── connectivity/           # Augmentation strategy resources
+│       ├── prompt.txt
+│       └── examples.json
+└── schema.json                 # Entity/relation type constraints (optional)
+```
+
+---
+
+## 🔌 LLM Clients
+
+| Client | Type | Default Model | Requirements |
+|--------|------|---------------|--------------|
+| `gemini` | Cloud | gemini-2.0-flash | `LANGEXTRACT_API_KEY` env var |
+| `ollama` | Local | llama3.1 | Ollama running on localhost:11434 |
+| `lmstudio` | Local | (loaded model) | LM Studio server running |
+
+### Environment Variables
+
+```bash
+export LANGEXTRACT_API_KEY="your-gemini-api-key"
+```
+
+---
+
+## 📊 Visualization Options
+
+### Network Visualization
+
+- **Layouts**: spring, circular, kamada_kawai, shell
+- **Dark Mode**: Premium dark theme with glassmorphism
+- **Interactive**: Hover tooltips, zoom, pan
+
+### Entity Visualization
+
+- **Text Highlighting**: Entity spans with color coding
+- **Animations**: Smooth highlight transitions
+- **Grouping**: By entity type or relation
+
+---
+
+## 🧪 Testing
+
+```bash
+# Quick validation
+python -m src extract --input data/sample.jsonl --domain default --limit 1
+
+# List available resources
+python -m src list domains
+python -m src list clients
+```
+
+---
+
+## 📖 Documentation
 
 - [Unified Extraction Guide](docs/UNIFIED_EXTRACTION_GUIDE.md) - Complete system documentation
-- [Quick Reference](README_UNIFIED_EXTRACTION.md) - Fast-start guide
-- [Examples](examples/unified_extraction_examples.py) - Working code examples
+- [Agent Skills](.agent/skills/) - Extensibility guides for developers
 
-## Testing
+---
 
-Validate your setup by processing a small sample:
-
-```bash
-python -m kg_constructor.extract_cli \
-  --client gemini \
-  --csv data/legal/sample_data.csv \
-  --limit 1 \
-  --output-dir outputs/test
-```
-
-Check that the output directory contains:
-- `extracted_json/` with JSON triples
-- `graphml/` with GraphML files
-- `visualizations/` with HTML files
-
-## License
+## 📄 License
 
 See LICENSE file for details.

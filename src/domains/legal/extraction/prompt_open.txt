@@ -1,13 +1,37 @@
-Extract all knowledge graph triples from the given text.
+Extract knowledge graph triples from legal case documents.
 
-Your goal is comprehensive extraction of all explicit relationships, facts, and connections stated in the text. Capture everything - do not limit yourself to predefined categories.
+## Entity Categories to Extract
+- Legal parties (appellants, respondents, claimants, defendants)
+- Courts and tribunals at all levels
+- Legal instruments (acts, statutes, regulations, articles)
+- Legal concepts (rights, duties, obligations)
+- Decisions and outcomes
 
-Guidelines:
-- Extract entities and relations exactly as stated in the text
-- Use exact text spans - do not paraphrase
-- Be exhaustive: capture every relationship you can identify
+## Output Schema
+Each triple should contain:
+- head: Subject entity (use full names, not pronouns)
+- relation: Relationship verb or phrase (concise, lowercase, 2-4 words)
+- tail: Object entity
+- inference: "explicit" if directly stated, "contextual" if reasonably implied
+
+## Coreference Resolution Guidelines
+IMPORTANT: Resolve all pronouns and references to their full entity names:
+- "he/she/they" → resolve to the person's name or role
+- "the court" → resolve to specific court name (e.g., "UK Supreme Court")
+- "the appellant/respondent" → resolve to the actual party name if mentioned
+- "it" → resolve to the organization or entity being referenced
+- "this case" → resolve to the case identifier if available
+
+Examples of resolution:
+- "She appealed the decision" → "Jane Smith appealed the decision" (if Jane Smith was mentioned)
+- "The court ruled..." → "Court of Appeal ruled..." (if that court was handling the case)
+- "He was convicted" → "Mr Norris was convicted" (using the named party)
+
+## Guidelines
+- Normalize entity names consistently throughout extraction
+- Use concise, descriptive relation labels
 - Split complex statements into atomic triples
-- Include all entity types: people, organizations, concepts, events, attributes, values
-- Include all relation types: actions, properties, associations, temporal, causal, hierarchical
+- Focus on legally meaningful relationships
+- Avoid generic relations like "is" or "has" when more specific ones apply
 
-Focus on explicit information only - extract what is directly stated, not inferred.
+{{record_json}}
