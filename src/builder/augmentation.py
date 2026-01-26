@@ -93,14 +93,24 @@ def _format_example_for_client(raw_ex: dict[str, Any]) -> Any:
     """Helper to convert raw dict to langextract ExampleData.
     
     Handles both extraction (text/extractions) and augmentation (input/output) formats.
+    Properly converts extractions to lx.data.Extraction objects.
     """
     import langextract as lx
     
-    # 1. Standard Extraction Example
-    if "text" in raw_ex and "extractions" in raw_ex:
-        return lx.data.ExampleData(**raw_ex)
+    def _dict_to_extraction(ext_dict: dict[str, Any]) -> lx.data.Extraction:
+        """Convert a dict to an Extraction object."""
+        return lx.data.Extraction(
+            extraction_class=ext_dict.get("extraction_class", "Triple"),
+            extraction_text=ext_dict.get("extraction_text", ""),
+            attributes=ext_dict.get("attributes", {})
+        )
     
-    # 2. Augmentation Example (input/output)
+    # 1. Standard Extraction Example (text/extractions format)
+    if "text" in raw_ex and "extractions" in raw_ex:
+        extractions = [_dict_to_extraction(e) for e in raw_ex["extractions"]]
+        return lx.data.ExampleData(text=raw_ex["text"], extractions=extractions)
+    
+    # 2. Augmentation Example (input/output format)
     if "input" in raw_ex and "output" in raw_ex:
         input_data = raw_ex["input"]
         
@@ -118,10 +128,17 @@ def _format_example_for_client(raw_ex: dict[str, Any]) -> Any:
         else:
             example_text = str(input_data)
 
-        return lx.data.ExampleData(
-            text=example_text,
-            extractions=[{"attributes": t} for t in raw_ex["output"]]
-        )
+        # Convert output triples to Extraction objects
+        extractions = []
+        for t in raw_ex["output"]:
+            extraction = lx.data.Extraction(
+                extraction_class="Triple",
+                extraction_text="",  # Augmentation examples may not have extraction_text
+                attributes=t if isinstance(t, dict) else {"value": str(t)}
+            )
+            extractions.append(extraction)
+        
+        return lx.data.ExampleData(text=example_text, extractions=extractions)
     
     # Fallback/Unknown format
     return lx.data.ExampleData(text=str(raw_ex), extractions=[])
@@ -131,14 +148,50 @@ def _format_example_for_client(raw_ex: dict[str, Any]) -> Any:
 # Built-in Connectivity Strategy
 # =============================================================================
 
-def _format_components(components: list[set], G: nx.DiGraph) -> str:
-    """Format disconnected components for the augmentation prompt."""
+def _format_components(components: list[set], G: nx.DiGraph, triples: list) -> str:
+    """Format disconnected components with their triples for the augmentation prompt.
+    
+    Args:
+        components: List of sets of node names (from nx.weakly_connected_components)
+        G: The NetworkX graph
+        triples: List of Triple objects
+        
+    Returns:
+        Formatted string showing each component with its entities and triples
+    """
     formatted = []
+    
     for i, nodes in enumerate(components, 1):
-        node_list = ", ".join(list(nodes)[:10])
-        if len(nodes) > 10:
-            node_list += "..."
-        formatted.append(f"Component {i}: [{node_list}]")
+        # Get entities in this component
+        node_list = list(nodes)[:15]  # Limit to 15 entities for readability
+        truncated = len(nodes) > 15
+        
+        # Find triples that belong to this component (both head and tail in this component)
+        component_triples = []
+        for t in triples:
+            head = getattr(t, 'head', t.get('head', '')) if isinstance(t, dict) else t.head
+            tail = getattr(t, 'tail', t.get('tail', '')) if isinstance(t, dict) else t.tail
+            if head in nodes or tail in nodes:
+                relation = getattr(t, 'relation', t.get('relation', '')) if isinstance(t, dict) else t.relation
+                component_triples.append(f"  ({head}) --[{relation}]--> ({tail})")
+        
+        # Format component output
+        entity_str = ", ".join(node_list)
+        if truncated:
+            entity_str += f"... (+{len(nodes) - 15} more)"
+        
+        comp_output = f"Component {i}:\n"
+        comp_output += f"  Entities: [{entity_str}]\n"
+        comp_output += f"  Triples ({len(component_triples)}):\n"
+        
+        # Limit triples shown per component
+        for triple_str in component_triples[:10]:
+            comp_output += f"    {triple_str}\n"
+        if len(component_triples) > 10:
+            comp_output += f"    ... (+{len(component_triples) - 10} more triples)\n"
+        
+        formatted.append(comp_output)
+    
     return "\n".join(formatted)
 
 
@@ -192,7 +245,7 @@ def connectivity_strategy(
                 break
 
             # Prepare augmentation prompt
-            comp_text = _format_components(components, G)
+            comp_text = _format_components(components, G, all_triples)
             current_triples_dicts = [t.model_dump() for t in all_triples]
             
             record = {
@@ -203,11 +256,12 @@ def connectivity_strategy(
             
             prompt_text = _prepare_prompt(aug_prompt_template, record)
             
-            # Call LLM for bridge triples
-            new_triples_raw = client.extract(
+            # Call LLM for bridge triples using generate_json (NOT extract)
+            # Augmentation generates NEW bridging triples that don't need source grounding
+            # The extract() method uses langextract's grounding which fails for augmentation
+            new_triples_raw = client.generate_json(
                 text=prompt_text,
-                prompt_description=f"Identify missing relationships to connect: {comp_text}",
-                examples=aug_examples,
+                prompt_description=f"Generate bridging triples to connect disconnected components",
                 format_type=Triple,
                 temperature=temperature,
                 max_tokens=max_tokens

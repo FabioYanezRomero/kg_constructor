@@ -1,74 +1,88 @@
 #!/bin/bash
 
 ################################################################################
+# TEST AUGMENTATION ONLY - OLLAMA
+# This script runs only the augmentation step from existing extracted data.
+# Use this to test the connectivity augmentation with intermediate results.
+################################################################################
+
+################################################################################
 # HYPERPARAMETERS - Configure these at the top
 ################################################################################
 
 # Ollama Configuration
-# Make sure Ollama is running and has a model loaded
-# Default server URL is http://localhost:11434
-
-# Model Configuration
-MODEL_PROVIDER="ollama"  # Using Ollama local model
+MODEL_PROVIDER="ollama"
 MODEL_NAME="gemma3:27b"  # Use the model name shown in Ollama (ollama list)
 TEMPERATURE=0.0
 
 # Ollama Server Configuration
 OLLAMA_BASE_URL="http://host.docker.internal:11434"  # Use host.docker.internal for Docker
 
-# Input Data
-INPUT_FILE="/app/data/legal/legal_background.jsonl"  # Path to your input file
-TEXT_FIELD="text"  # Field name containing the text to analyze
-ID_FIELD="id"  # Field name containing record IDs
-RECORD_IDS="UKSC-2009-0143"  # Specific record ID(s) to process (comma-separated, or empty for all)
+# Input Data - Path to original input file (for text context)
+INPUT_FILE="/app/data/legal/legal_background.jsonl"
+TEXT_FIELD="text"
+ID_FIELD="id"
+RECORD_IDS="UKSC-2009-0143"
+
+# Source data directory - Where the extracted JSON is located (from previous extraction)
+# Change this to point to an existing extraction output
+SOURCE_OUTPUT_DIR="/app/test_outputs/single_extraction_lmstudio_20260124_181032"
 
 # Domain Configuration
-DOMAIN="legal"  # Use: python -m src list domains
+DOMAIN="legal"
+MODE="open"
 
-# Extraction Mode
-MODE="open"  # Options: open, closed
-
-# Output Configuration
-OUTPUT_DIR="/app/test_outputs/single_extraction_ollama_$(date +%Y%m%d_%H%M%S)"
+# Output Configuration - Where to save augmented results
+OUTPUT_DIR="/app/test_outputs/augmentation_only_ollama_$(date +%Y%m%d_%H%M%S)"
 
 # Connectivity Augmentation Configuration
-MAX_DISCONNECTED=1  # Maximum acceptable disconnected components
-MAX_ITERATIONS=3    # Max refinement iterations (lower for local models)
+MAX_DISCONNECTED=1  # Target: single connected component
+MAX_ITERATIONS=3    # Max refinement iterations
 
 # Visualization Options
-CREATE_NETWORK_VIZ=true  # Create NetworkX/Plotly graph visualization
-CREATE_EXTRACTION_VIZ=true  # Create langextract HTML visualization
-DARK_MODE=false  # Enable dark mode for network visualization
-LAYOUT="spring"  # Graph layout (spring, circular, kamada_kawai, shell)
-GROUP_BY="entity_type"  # Options: entity_type, relation
+CREATE_NETWORK_VIZ=true
+CREATE_EXTRACTION_VIZ=true
+DARK_MODE=false
+LAYOUT="spring"
+GROUP_BY="entity_type"
 
 # Processing Options
-MAX_WORKERS=3  # Lower for local models
-TIMEOUT=300  # Higher timeout for local models
+MAX_WORKERS=3
+TIMEOUT=300
 
 ################################################################################
-# Script Execution - Do not modify below this line
+# Script Execution
 ################################################################################
 
-set -e  # Exit on error
+set -e
 
 echo "================================================================================"
-echo "KNOWLEDGE GRAPH EXTRACTION - SINGLE TEXT TEST (Ollama)"
-echo "Using Typer CLI for unified command-line interface"
+echo "KNOWLEDGE GRAPH AUGMENTATION TEST - Ollama"
+echo "Testing augmentation step from existing extracted data"
 echo "================================================================================"
 echo "Model Provider: $MODEL_PROVIDER"
 echo "Model Name: $MODEL_NAME"
 echo "Ollama URL: $OLLAMA_BASE_URL"
-echo "Input File: $INPUT_FILE"
-echo "Record IDs: $RECORD_IDS"
-echo "Domain: $DOMAIN"
-echo "Mode: $MODE"
+echo ""
+echo "Source Data: $SOURCE_OUTPUT_DIR"
 echo "Output Directory: $OUTPUT_DIR"
 echo ""
 echo "Connectivity Configuration:"
 echo "  • Max disconnected: $MAX_DISCONNECTED"
 echo "  • Max iterations: $MAX_ITERATIONS"
 echo "================================================================================"
+
+# Check if source data exists
+SOURCE_JSON_DIR="$SOURCE_OUTPUT_DIR/extracted_json"
+if [ ! -d "$SOURCE_JSON_DIR" ]; then
+    echo "ERROR: Source JSON directory not found: $SOURCE_JSON_DIR"
+    echo "Please run the full extraction first or update SOURCE_OUTPUT_DIR."
+    exit 1
+fi
+
+echo ""
+echo "Found source extraction data at: $SOURCE_JSON_DIR"
+ls -la "$SOURCE_JSON_DIR"
 
 # Check if Ollama is reachable
 echo ""
@@ -94,15 +108,17 @@ print('Please ensure:')
 print('1. Ollama is running (ollama serve)')
 print('2. A model is loaded (ollama pull $MODEL_NAME)')
 print('3. The URL is correct (default: http://localhost:11434)')
-print('')
-print('Continuing anyway - the script will fail if Ollama is not available.')
 print('================================================================================')
 "
 
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
+# Create output directory and copy existing extraction data
+mkdir -p "$OUTPUT_DIR/extracted_json"
+echo ""
+echo "Copying source extraction data to output directory..."
+cp "$SOURCE_JSON_DIR"/*.json "$OUTPUT_DIR/extracted_json/"
+echo "✓ Copied $(ls -1 "$OUTPUT_DIR/extracted_json" | wc -l) JSON files"
 
-# Build common CLI options
+# Build CLI options for augmentation
 CLI_OPTS=""
 CLI_OPTS="$CLI_OPTS --input $INPUT_FILE"
 CLI_OPTS="$CLI_OPTS --output-dir $OUTPUT_DIR"
@@ -125,27 +141,12 @@ if [ -n "$MAX_WORKERS" ]; then
 fi
 
 # ================================================================================
-# STEP 1: EXTRACT TRIPLES
+# STEP 1: AUGMENT CONNECTIVITY (Main test)
 # ================================================================================
 echo ""
 echo "================================================================================"
-echo "STEP 1: EXTRACTING TRIPLES"
-echo "================================================================================"
-
-python3 -m src extract $CLI_OPTS
-
-EXTRACTION_EXIT_CODE=$?
-if [ $EXTRACTION_EXIT_CODE -ne 0 ]; then
-    echo "ERROR: Extraction failed with exit code $EXTRACTION_EXIT_CODE"
-    exit $EXTRACTION_EXIT_CODE
-fi
-
-# ================================================================================
-# STEP 2: AUGMENT CONNECTIVITY
-# ================================================================================
-echo ""
-echo "================================================================================"
-echo "STEP 2: AUGMENTING CONNECTIVITY"
+echo "STEP 1: AUGMENTING CONNECTIVITY"
+echo "Starting from existing extraction with $(ls -1 "$OUTPUT_DIR/extracted_json" | wc -l) files"
 echo "================================================================================"
 
 python3 -m src augment connectivity $CLI_OPTS \
@@ -159,11 +160,11 @@ if [ $AUGMENT_EXIT_CODE -ne 0 ]; then
 fi
 
 # ================================================================================
-# STEP 3: CONVERT TO GRAPHML
+# STEP 2: CONVERT TO GRAPHML
 # ================================================================================
 echo ""
 echo "================================================================================"
-echo "STEP 3: CONVERTING TO GRAPHML"
+echo "STEP 2: CONVERTING TO GRAPHML"
 echo "================================================================================"
 
 JSON_DIR="$OUTPUT_DIR/extracted_json"
@@ -178,14 +179,14 @@ if [ $CONVERT_EXIT_CODE -ne 0 ]; then
 fi
 
 # ================================================================================
-# STEP 4: CREATE VISUALIZATIONS
+# STEP 3: CREATE VISUALIZATIONS
 # ================================================================================
 
 # Network visualization
 if [ "$CREATE_NETWORK_VIZ" = true ]; then
     echo ""
     echo "================================================================================"
-    echo "STEP 4a: CREATING NETWORK VISUALIZATION"
+    echo "STEP 3a: CREATING NETWORK VISUALIZATION"
     echo "================================================================================"
 
     NETWORK_VIZ_DIR="$OUTPUT_DIR/network_viz"
@@ -206,11 +207,11 @@ fi
 if [ "$CREATE_EXTRACTION_VIZ" = true ]; then
     echo ""
     echo "================================================================================"
-    echo "STEP 4b: CREATING EXTRACTION VISUALIZATION"
+    echo "STEP 3b: CREATING EXTRACTION VISUALIZATION"
     echo "================================================================================"
 
     EXTRACTION_VIZ_DIR="$OUTPUT_DIR/extraction_viz"
-    
+
     python3 -m src visualize extraction \
         --input "$INPUT_FILE" \
         --triples "$JSON_DIR" \
@@ -230,25 +231,54 @@ fi
 # ================================================================================
 echo ""
 echo "================================================================================"
-echo "SUCCESS! All files generated in: $OUTPUT_DIR"
+echo "AUGMENTATION TEST COMPLETE"
 echo "================================================================================"
 echo ""
-echo "View the results:"
-echo "  JSON triples: $JSON_DIR/"
-echo "  GraphML: $GRAPHML_DIR/"
+echo "Output Directory: $OUTPUT_DIR"
+echo ""
+echo "Generated Files:"
+ls -la "$OUTPUT_DIR/extracted_json/" 2>/dev/null || echo "  (no JSON files)"
+echo ""
+
+# Compare before and after
+echo "Comparing extraction before and after augmentation:"
+echo ""
+BEFORE_TRIPLES=$(python3 -c "
+import json
+import glob
+total = 0
+for f in glob.glob('$SOURCE_JSON_DIR/*.json'):
+    with open(f) as fp:
+        total += len(json.load(fp))
+print(total)
+")
+AFTER_TRIPLES=$(python3 -c "
+import json
+import glob
+total = 0
+for f in glob.glob('$OUTPUT_DIR/extracted_json/*.json'):
+    with open(f) as fp:
+        total += len(json.load(fp))
+print(total)
+")
+
+echo "  Before augmentation: $BEFORE_TRIPLES triples"
+echo "  After augmentation:  $AFTER_TRIPLES triples"
+echo "  New bridging triples: $((AFTER_TRIPLES - BEFORE_TRIPLES))"
+echo ""
+
 if [ "$CREATE_NETWORK_VIZ" = true ]; then
-    echo "  Network visualization: file://$OUTPUT_DIR/network_viz/"
+    echo "Network Visualization:"
+    ls -la "$OUTPUT_DIR/network_viz/" 2>/dev/null || echo "  (no visualization files)"
+    echo ""
 fi
+
 if [ "$CREATE_EXTRACTION_VIZ" = true ]; then
-    echo "  Extraction visualization: file://$OUTPUT_DIR/extraction_viz/"
+    echo "Extraction Visualization:"
+    ls -la "$OUTPUT_DIR/extraction_viz/" 2>/dev/null || echo "  (no visualization files)"
+    echo ""
 fi
-echo ""
-echo "Output structure:"
-tree -L 2 "$OUTPUT_DIR" 2>/dev/null || ls -R "$OUTPUT_DIR"
-echo ""
+
 echo "================================================================================"
-echo "To explore available commands, run:"
-echo "  python -m src --help"
-echo "  python -m src list domains"
-echo "  python -m src list clients"
+echo "Done! Review the output at: $OUTPUT_DIR"
 echo "================================================================================"

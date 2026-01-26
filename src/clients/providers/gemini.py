@@ -136,6 +136,7 @@ class GeminiClient(BaseLLMClient):
 
             return triples
 
+        # Return the entire traceback
         except Exception as e:
             import traceback
             traceback.print_exc()

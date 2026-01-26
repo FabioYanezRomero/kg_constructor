@@ -8,3 +8,6 @@ Extraction Rules
 - Identify entities and relations explicitly stated in the text.
 - Prefer splitting complex phrases into smaller meaningful entities.
 - Every explicit triple must be labeled with "inference": "explicit".
+
+Input to analyze:
+{{record_json}}

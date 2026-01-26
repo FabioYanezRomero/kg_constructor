@@ -8,7 +8,10 @@
       "Bash(python:*)",
       "Bash(chmod:*)",
       "Bash(bash:*)",
-      "Bash(jq:*)"
+      "Bash(jq:*)",
+      "Bash(git add:*)",
+      "Bash(git rebase:*)",
+      "Bash(GIT_EDITOR=true git rebase:*)"
     ]
   }
 }

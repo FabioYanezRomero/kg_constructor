@@ -51,6 +51,7 @@ def load_records(
     path: Path,
     text_field: str = "text",
     id_field: str = "id",
+    record_ids: list[str] | None = None,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Load records from a file.
@@ -61,6 +62,7 @@ def load_records(
         path: Path to input file
         text_field: Name of the field containing text (default: "text")
         id_field: Name of the field containing record IDs (default: "id")
+        record_id: Optional list of record IDs to load
         limit: Optional limit on number of records
         
     Returns:
@@ -84,6 +86,8 @@ def load_records(
     # Normalize field names and validate
     normalized = []
     for i, record in enumerate(records):
+        if record_ids and str(record[id_field]) not in record_ids:
+            continue
         if limit and len(normalized) >= limit:
             break
             

@@ -265,6 +265,8 @@ class LMStudioClient(BaseLLMClient):
             return triples
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()  # Print to stderr
             raise LLMClientError(f"LM Studio extraction failed: {e}") from e
 
     def get_model_name(self) -> str:

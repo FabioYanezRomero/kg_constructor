@@ -34,4 +34,7 @@ Examples of resolution:
 - Focus on legally meaningful relationships
 - Avoid generic relations like "is" or "has" when more specific ones apply
 
+Focus on explicit information only - extract what is directly stated, not inferred.
+
+Input to analyze:
 {{record_json}}

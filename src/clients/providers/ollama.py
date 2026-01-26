@@ -250,26 +250,30 @@ class OllamaClient(BaseLLMClient):
         try:
             # Build the prompt with schema
             schema_json = format_type.schema_json()
-            full_prompt = f"""
-{prompt_description}
+            full_prompt = f"""{prompt_description}
 
-Return the results as a JSON list of objects matching this JSON schema:
+Return the results as a JSON array of objects matching this schema:
 {schema_json}
 
 Input Text:
 {text}
 
-Respond with ONLY valid JSON, no additional text or markdown.
-"""
+IMPORTANT: Respond with ONLY a valid JSON array. No markdown code blocks, no explanation, just the JSON array starting with [ and ending with ].
+Each object MUST have at minimum: "head", "relation", "tail" fields."""
+
+            # Debug: Show prompt length
+            print(f"  [DEBUG Ollama] Prompt length: {len(full_prompt)} chars")
 
             # Call Ollama API directly
+            # NOTE: Do NOT use format:"json" - it forces single object responses
+            # We want arrays like LMStudio, so rely on prompt instructions instead
             response = requests.post(
                 f"{self.base_url}/api/generate",
                 json={
                     "model": self.model_id,
                     "prompt": full_prompt,
                     "stream": False,
-                    "format": "json",
+                    # "format": "json",  # DISABLED - forces single object, not array
                     "options": {
                         "temperature": temperature if temperature is not None else 0.0,
                         **({"num_predict": max_tokens} if max_tokens else {}),
@@ -282,7 +286,12 @@ Respond with ONLY valid JSON, no additional text or markdown.
             result = response.json()
             response_text = result.get("response", "")
 
+            # Debug: Show raw response
+            print(f"  [DEBUG Ollama] Response length: {len(response_text)} chars")
+            print(f"  [DEBUG Ollama] Response preview: {response_text[:500]}...")
+
             if not response_text:
+                print("  [DEBUG Ollama] Empty response!")
                 return []
 
             # Parse the JSON response with robust extraction
@@ -316,6 +325,11 @@ Respond with ONLY valid JSON, no additional text or markdown.
                 else:
                     return []
 
+                # Debug: Show parsed items
+                print(f"  [DEBUG Ollama] Parsed {len(items)} items")
+                for i, item in enumerate(items[:3]):  # Show first 3
+                    print(f"    Item {i}: {item}")
+
                 # Force inference to contextual for bridging (consistency across providers)
                 for item in items:
                     if isinstance(item, dict):
@@ -323,6 +337,7 @@ Respond with ONLY valid JSON, no additional text or markdown.
                 
                 return items
             except json.JSONDecodeError as e:
+                print(f"  [DEBUG Ollama] JSON parse error: {e}")
                 raise LLMClientError(f"Failed to parse JSON response: {e}\nResponse text: {response_text[:500]}")
 
         except requests.RequestException as e:

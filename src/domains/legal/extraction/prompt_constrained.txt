@@ -22,3 +22,6 @@ Relation Types:
 - Temporal: occurred_on, preceded, followed
 - Causal: caused, resulted_in, led_to
 - Participation: involved_in, party_to, signed_by
+
+Input to analyze:
+{{record_json}}

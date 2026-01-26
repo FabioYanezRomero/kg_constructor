@@ -21,38 +21,42 @@ def _prepare_prompt(prompt_template: str, record: dict[str, Any]) -> str:
 
 
 def _create_examples(domain: KnowledgeDomain) -> list[lx.data.ExampleData]:
-    """Create few-shot examples for langextract extraction."""
+    """Create few-shot examples for langextract extraction.
+    
+    Converts raw example dicts to proper langextract ExampleData objects
+    with Extraction objects (not plain dicts).
+    """
     raw_examples = domain.extraction.examples
     examples = []
     
     # Valid fields for lx.data.Extraction
     valid_extraction_fields = {
-        "extraction_text", "extraction_class", "attributes", 
-        "char_interval", "description", "extraction_index", 
+        "extraction_text", "extraction_class", "attributes",
+        "char_interval", "description", "extraction_index",
         "group_index", "alignment_status"
     }
 
     for ex_data in raw_examples:
         # Make a copy to avoid mutating original
         ex_data = dict(ex_data)
-        
+
         # Convert dict extractions to Extraction objects
         if "extractions" in ex_data:
             extractions = []
             for ext in ex_data["extractions"]:
                 if isinstance(ext, dict):
                     ext = dict(ext)  # Copy to avoid mutation
-                    
+
                     # Convert char_start/char_end to char_interval
                     if "char_start" in ext and "char_end" in ext:
                         char_start = ext.pop("char_start")
                         char_end = ext.pop("char_end")
                         if char_start is not None and char_end is not None:
                             ext["char_interval"] = lx.data.CharInterval(
-                                start_pos=char_start, 
+                                start_pos=char_start,
                                 end_pos=char_end
                             )
-                    
+
                     # Filter keys to valid fields
                     filtered_ext = {k: v for k, v in ext.items() if k in valid_extraction_fields}
                     extractions.append(lx.data.Extraction(**filtered_ext))

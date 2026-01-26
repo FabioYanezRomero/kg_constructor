@@ -1,13 +1,7 @@
 You are an expert system for improving knowledge graph connectivity in legal case analysis.
 
 Context
-A knowledge graph has been extracted from a legal case background, but it contains {num_components} disconnected components. Your primary goal is to CONNECT these components by finding missing relationships.
-
-Disconnected Components
-{component_info}
-
-Original Text
-{text}
+A knowledge graph has been extracted from a legal case background, but it contains disconnected components. Your primary goal is to CONNECT these components by finding missing relationships.
 
 Objective
 Your priority is to reduce the number of disconnected components to the absolute minimum. 
@@ -48,3 +42,11 @@ Return a JSON array of NEW triples only:
 Remember:
 - Connectivity is the priority. Bridging the gap between isolated nodes is your main task.
 - Be aggressive with Hub Nodes if it helps unify the knowledge graph.
+
+Input Data:
+The following JSON contains:
+- "text": The original source text to analyze
+- "disconnected_components": Each component with its entities AND their triples (updated each iteration)
+- "current_triples": All triples extracted so far as JSON
+
+{{record_json}}

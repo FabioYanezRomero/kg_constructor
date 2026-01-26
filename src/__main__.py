@@ -144,6 +144,7 @@ def extract(
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL for Ollama/LM Studio"),
     text_field: str = typer.Option("text", "--text-field", help="Field name containing text"),
     id_field: str = typer.Option("id", "--id-field", help="Field name containing record IDs"),
+    record_ids: Optional[list[str]] = typer.Option(None, "--record-ids", help="List of record IDs to process"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of records"),
     temperature: float = typer.Option(0.0, "--temp", help="Sampling temperature"),
     prompt_override: Optional[Path] = typer.Option(None, "--prompt", help="Override extraction prompt", exists=True),
@@ -162,7 +163,7 @@ def extract(
     
     try:
         # Load records
-        records = load_records(input_file, text_field, id_field, limit)
+        records = load_records(input_file, text_field, id_field, record_ids, limit)
         console.print(f"Loaded {len(records)} records")
         
         # Setup domain and client
@@ -224,6 +225,7 @@ def augment_connectivity(
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL"),
     text_field: str = typer.Option("text", "--text-field", help="Field name containing text"),
     id_field: str = typer.Option("id", "--id-field", help="Field name containing IDs"),
+    record_ids: Optional[list[str]] = typer.Option(None, "--record-ids", help="List of record IDs to process"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit records"),
     temperature: float = typer.Option(0.0, "--temp", help="Sampling temperature"),
     max_disconnected: int = typer.Option(3, "--max-disconnected", help="Target max disconnected components"),
@@ -242,7 +244,7 @@ def augment_connectivity(
     console.print(f"Target: ≤ {max_disconnected} components | Max iterations: {max_iterations}")
     
     try:
-        records = load_records(input_file, text_field, id_field, limit)
+        records = load_records(input_file, text_field, id_field, record_ids, limit)
         
         from .domains import get_domain
         domain_obj = get_domain(domain, extraction_mode=mode)
