@@ -387,7 +387,7 @@ def visualize_extraction(
     viz_dir = output_dir or triples_dir.parent / "visualizations_extraction"
     
     try:
-        records = load_records(input_file, text_field, id_field, limit)
+        records = load_records(input_file, text_field, id_field, limit=limit)
         visualizer = EntityVisualizer(animation_speed=animation_speed)
         
         # Prepare records for batch visualizer

@@ -21,8 +21,15 @@ MODEL_PROVIDER="gemini"  # Options: gemini, ollama, lmstudio
 MODEL_NAME="gemini-2.0-flash"  # For gemini: gemini-2.0-flash, gemini-2.5-flash, etc.
 TEMPERATURE=0.0
 
+# Base directory detection (Docker vs local)
+if [ -d "/app/src" ]; then
+    BASE_DIR="/app"
+else
+    BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+fi
+
 # Input Data
-INPUT_FILE="/app/data/legal/legal_background.jsonl"  # Path to your input file
+INPUT_FILE="${BASE_DIR}/data/legal/legal_background.jsonl"  # Path to your input file
 TEXT_FIELD="text"  # Field name containing the text to analyze
 ID_FIELD="id"  # Field name containing record IDs
 RECORD_IDS="UKSC-2009-0143"  # Specific record ID(s) to process (comma-separated, or empty for all)
@@ -34,7 +41,7 @@ DOMAIN="legal"  # Use: python -m src list domains
 MODE="open"  # Options: open, closed
 
 # Output Configuration
-OUTPUT_DIR="/app/test_outputs/single_extraction_$(date +%Y%m%d_%H%M%S)"
+OUTPUT_DIR="${BASE_DIR}/test_outputs/single_extraction_$(date +%Y%m%d_%H%M%S)"
 
 # Connectivity Augmentation Configuration
 MAX_DISCONNECTED=1  # Maximum acceptable disconnected components
@@ -58,9 +65,9 @@ TIMEOUT=120  # Request timeout in seconds
 set -e  # Exit on error
 
 # Load .env file if it exists
-if [ -f "/app/.env" ]; then
-    echo "Loading environment variables from /app/.env"
-    export $(grep -v '^#' /app/.env | xargs)
+if [ -f "${BASE_DIR}/.env" ]; then
+    echo "Loading environment variables from ${BASE_DIR}/.env"
+    export $(grep -v '^#' "${BASE_DIR}/.env" | xargs)
 fi
 
 # Check API key for Gemini
@@ -149,12 +156,9 @@ echo "==========================================================================
 echo "STEP 1: EXTRACTING TRIPLES"
 echo "================================================================================"
 
-python3 -m src extract $CLI_OPTS
-
-EXTRACTION_EXIT_CODE=$?
-if [ $EXTRACTION_EXIT_CODE -ne 0 ]; then
-    echo "ERROR: Extraction failed with exit code $EXTRACTION_EXIT_CODE"
-    exit $EXTRACTION_EXIT_CODE
+if ! python3 -m src extract $CLI_OPTS; then
+    echo "ERROR: Extraction failed"
+    exit 1
 fi
 
 # ================================================================================
@@ -165,14 +169,11 @@ echo "==========================================================================
 echo "STEP 2: AUGMENTING CONNECTIVITY"
 echo "================================================================================"
 
-python3 -m src augment connectivity $CLI_OPTS \
+if ! python3 -m src augment connectivity $CLI_OPTS \
     --max-disconnected $MAX_DISCONNECTED \
-    --max-iterations $MAX_ITERATIONS
-
-AUGMENT_EXIT_CODE=$?
-if [ $AUGMENT_EXIT_CODE -ne 0 ]; then
-    echo "ERROR: Augmentation failed with exit code $AUGMENT_EXIT_CODE"
-    exit $AUGMENT_EXIT_CODE
+    --max-iterations $MAX_ITERATIONS; then
+    echo "ERROR: Augmentation failed"
+    exit 1
 fi
 
 # ================================================================================
@@ -186,12 +187,9 @@ echo "==========================================================================
 JSON_DIR="$OUTPUT_DIR/extracted_json"
 GRAPHML_DIR="$OUTPUT_DIR/graphml"
 
-python3 -m src convert --input "$JSON_DIR" --output "$GRAPHML_DIR"
-
-CONVERT_EXIT_CODE=$?
-if [ $CONVERT_EXIT_CODE -ne 0 ]; then
-    echo "ERROR: Conversion failed with exit code $CONVERT_EXIT_CODE"
-    exit $CONVERT_EXIT_CODE
+if ! python3 -m src convert --input "$JSON_DIR" --output "$GRAPHML_DIR"; then
+    echo "ERROR: Conversion failed"
+    exit 1
 fi
 
 # ================================================================================
@@ -211,11 +209,8 @@ if [ "$CREATE_NETWORK_VIZ" = true ]; then
         VIZ_OPTS="$VIZ_OPTS --dark-mode"
     fi
 
-    python3 -m src visualize network $VIZ_OPTS
-
-    VIZ_EXIT_CODE=$?
-    if [ $VIZ_EXIT_CODE -ne 0 ]; then
-        echo "WARNING: Network visualization failed with exit code $VIZ_EXIT_CODE"
+    if ! python3 -m src visualize network $VIZ_OPTS; then
+        echo "WARNING: Network visualization failed"
     fi
 fi
 
@@ -228,17 +223,14 @@ if [ "$CREATE_EXTRACTION_VIZ" = true ]; then
 
     EXTRACTION_VIZ_DIR="$OUTPUT_DIR/extraction_viz"
     
-    python3 -m src visualize extraction \
+    if ! python3 -m src visualize extraction \
         --input "$INPUT_FILE" \
         --triples "$JSON_DIR" \
         --output "$EXTRACTION_VIZ_DIR" \
         --text-field "$TEXT_FIELD" \
         --id-field "$ID_FIELD" \
-        --group-by "$GROUP_BY"
-
-    VIZ_EXIT_CODE=$?
-    if [ $VIZ_EXIT_CODE -ne 0 ]; then
-        echo "WARNING: Extraction visualization failed with exit code $VIZ_EXIT_CODE"
+        --group-by "$GROUP_BY"; then
+        echo "WARNING: Extraction visualization failed"
     fi
 fi
 

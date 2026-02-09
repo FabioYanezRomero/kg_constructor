@@ -11,7 +11,12 @@
       "Bash(jq:*)",
       "Bash(git add:*)",
       "Bash(git rebase:*)",
-      "Bash(GIT_EDITOR=true git rebase:*)"
+      "Bash(GIT_EDITOR=true git rebase:*)",
+      "Bash(ls:*)",
+      "Bash(curl:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)"
     ]
   }
 }

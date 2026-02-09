@@ -303,7 +303,7 @@ class LMStudioClient(BaseLLMClient):
 
         try:
             # Build the prompt with schema
-            schema_json = format_type.schema_json()
+            schema_json = json.dumps(format_type.model_json_schema(), indent=2)
             full_prompt = f"""
 {prompt_description}
 
