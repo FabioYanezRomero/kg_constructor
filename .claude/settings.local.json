@@ -16,7 +16,10 @@
       "Bash(curl:*)",
       "Bash(docker exec:*)",
       "Bash(docker stop:*)",
-      "Bash(docker rm:*)"
+      "Bash(docker rm:*)",
+      "Bash(git stash:*)",
+      "Bash(git push:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
