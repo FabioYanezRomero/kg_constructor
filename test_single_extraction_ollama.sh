@@ -10,7 +10,7 @@
 
 # Model Configuration
 MODEL_PROVIDER="ollama"  # Using Ollama local model
-MODEL_NAME="gemma3:27b"  # Use the model name shown in Ollama (ollama list)
+MODEL_NAME="gemma3:1b"  # Use the model name shown in Ollama (ollama list)
 TEMPERATURE=0.0
 
 # Base directory detection (Docker vs local)
