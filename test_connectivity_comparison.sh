@@ -12,7 +12,7 @@ TEMPERATURE=0.0
 INPUT_JSON="/app/data/legal/processed/legal_background.jsonl"
 RECORD_ID="UKSC-2009-0143"
 TEXT_FIELD="text"
-PROMPT_FILE="/app/src/prompts/legal_background_prompt.txt"
+PROMPT_FILE="/app/kg_constructor/prompts/legal_background_prompt.txt"
 
 # Output directories
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -45,7 +45,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from kg_constructor import KnowledgeGraphExtractor, ClientConfig
 import networkx as nx

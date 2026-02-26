@@ -4,21 +4,23 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app/src \
     VLLM_URL=http://localhost:8000 \
     OUTPUT_DIR=/app/data/output
 
 COPY requirements.txt ./
+COPY pyproject.toml ./
 RUN apt-get update && apt-get install -y --no-install-recommends \
         wget git procps ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY src ./src
+COPY kg_constructor ./kg_constructor
 COPY README.md ./
 COPY Makefile ./
 COPY LICENSE ./
 
-RUN mkdir -p \"${OUTPUT_DIR}\"
+RUN pip install --no-cache-dir -e .
 
-ENTRYPOINT ["python", "-m", "kg_constructor"]
+RUN mkdir -p "${OUTPUT_DIR}"
+
+ENTRYPOINT ["kg_constructor"]

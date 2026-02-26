@@ -4,7 +4,7 @@ This module provides the Unified Domain Pattern for managing
 knowledge domain resources (prompts, examples, schemas).
 
 Usage:
-    from src.domains import get_domain, domain, KnowledgeDomain
+    from kg_constructor.domains import get_domain, domain, KnowledgeDomain
     
     # Get a registered domain
     legal = get_domain("legal", extraction_mode="open")

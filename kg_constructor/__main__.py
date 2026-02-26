@@ -11,6 +11,9 @@ Commands:
     visualize extraction - Show entity highlights in source text (langextract)
     list domains         - List available knowledge domains
     list clients         - List available LLM client types
+
+Interactive mode:
+    Run `kg_constructor` with no arguments to enter the interactive shell.
 """
 
 from __future__ import annotations
@@ -22,6 +25,8 @@ import absl.logging
 absl.logging.set_verbosity(absl.logging.ERROR)
 
 import json
+import shlex
+import sys
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Any
@@ -41,10 +46,11 @@ from .visualization import batch_visualize_graphs, EntityVisualizer
 from .domains import list_available_domains, ExtractionMode
 from .pipeline import PipelineRunner, PipelineContext, get_step
 
+__version__ = "0.1.0"
+
 # Initialize Typer apps
 app = typer.Typer(
     help="Knowledge graph generation framework.",
-    no_args_is_help=True
 )
 
 augment_app = typer.Typer(
@@ -161,8 +167,8 @@ def run_pipeline(
     
     \b
     Examples:
-        python -m src run-pipeline --input data.jsonl --domain legal --extract --client ollama
-        python -m src run-pipeline --input data.jsonl --domain legal --extract --augment --convert --visualize --client ollama
+        kg_constructor run-pipeline --input data.jsonl --domain legal --extract --client ollama
+        kg_constructor run-pipeline --input data.jsonl --domain legal --extract --augment --convert --visualize --client ollama
     """
     if not any([do_extract, do_augment, do_convert, do_visualize]):
         console.print("[yellow]Warning: No pipeline steps selected. Use --extract, --augment, --convert, or --visualize.[/yellow]")
@@ -260,7 +266,7 @@ def extract(
     
     \b
     Examples:
-        python -m src extract --input data.jsonl --domain legal
+        kg_constructor extract --input data.jsonl --domain legal
     """
     console.print(f"[bold blue]Step 1: Extraction[/bold blue]")
     console.print(f"Input: [dim]{input_file}[/dim] | Domain: [green]{domain}[/green]")
@@ -306,7 +312,7 @@ def extract(
         
         console.print(f"\n[bold green]✓ Extraction complete.[/bold green]")
         console.print(f"Output: {json_dir} ({len(output_files)} files)")
-        console.print(f"\n[dim]Next: python -m src augment connectivity --input {input_file} --domain {domain}[/dim]")
+        console.print(f"\n[dim]Next: kg_constructor augment connectivity --input {input_file} --domain {domain}[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
@@ -342,7 +348,7 @@ def augment_connectivity(
     
     \b
     Examples:
-        python -m src augment connectivity --input data.jsonl --domain legal
+        kg_constructor augment connectivity --input data.jsonl --domain legal
     """
     console.print(f"[bold blue]Step 2: Augmentation (Connectivity)[/bold blue]")
     console.print(f"Target: ≤ {max_disconnected} components | Max iterations: {max_iterations}")
@@ -395,7 +401,7 @@ def augment_connectivity(
         
         console.print(f"\n[bold green]✓ Augmentation complete.[/bold green]")
         console.print(f"Output: {json_dir} ({len(output_files)} files)")
-        console.print(f"\n[dim]Next: python -m src convert --input {json_dir}[/dim]")
+        console.print(f"\n[dim]Next: kg_constructor convert --input {json_dir}[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
@@ -423,7 +429,7 @@ def convert(
     
     \b
     Examples:
-        python -m src convert --input outputs/extracted_json
+        kg_constructor convert --input outputs/extracted_json
     """
     console.print(f"[bold blue]Converting JSON to GraphML[/bold blue]")
     
@@ -433,7 +439,7 @@ def convert(
         graphml_files = convert_json_directory(input_dir, graphml_dir)
         console.print(f"\n[bold green]✓ Converted {len(graphml_files)} files[/bold green]")
         console.print(f"Output: {graphml_dir}")
-        console.print(f"\n[dim]Next: python -m src visualize network --input {graphml_dir}[/dim]")
+        console.print(f"\n[dim]Next: kg_constructor visualize network --input {graphml_dir}[/dim]")
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(code=1)
@@ -454,7 +460,7 @@ def visualize_network(
     
     \b
     Examples:
-        python -m src visualize network --input outputs/graphml --dark-mode
+        kg_constructor visualize network --input outputs/graphml --dark-mode
     """
     console.print(f"[bold blue]Creating Network Visualizations[/bold blue]")
     
@@ -484,7 +490,7 @@ def visualize_extraction(
     
     \b
     Examples:
-        python -m src visualize extraction --input data.jsonl --triples outputs/extracted_json
+        kg_constructor visualize extraction --input data.jsonl --triples outputs/extracted_json
     """
     console.print(f"[bold blue]Creating Extraction Visualizations[/bold blue]")
     
@@ -513,11 +519,86 @@ def visualize_extraction(
         raise typer.Exit(code=1)
 
 
-@app.callback()
-def main():
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context):
     """Knowledge graph generation framework."""
-    pass
+    if ctx.invoked_subcommand is None:
+        # When called via Typer with no subcommand, show help
+        raise typer.Exit()
+
+
+# =============================================================================
+# KGB ASCII Banner & Interactive Shell
+# =============================================================================
+
+KGB_BANNER = r"""
+    ╔═══════════════════════════════════════════════════════╗
+    ║                                                       ║
+    ║      ◉         ◉    ◉━━━━◉━━━━◉    ◉━━━━◉━━━━◉        ║
+    ║      ┃        ╱     ┃              ┃          ╲       ║
+    ║      ◉       ◉      ◉              ◉           ◉      ║
+    ║      ┃      ╱       ┃              ┃          ╱       ║
+    ║      ◉━━━━━◉        ◉    ◉━━━━◉    ◉━━━━◉━━━━◉        ║
+    ║      ┃      ╲       ┃         ┃    ┃          ╲       ║
+    ║      ◉       ◉      ◉         ◉    ◉           ◉      ║
+    ║      ┃        ╲     ┃         ┃    ┃          ╱       ║
+    ║      ◉         ◉    ◉━━━━◉━━━━◉    ◉━━━━◉━━━━◉        ║
+    ║                                                       ║
+    ║     K n o w l e d g e   G r a p h   B u i l d e r     ║
+    ║                                                       ║
+    ╚═══════════════════════════════════════════════════════╝
+"""
+
+
+def interactive_shell():
+    """Run the interactive KGB shell with REPL."""
+    console.print(KGB_BANNER, style="bold green")
+    console.print(f"  Knowledge Graph Builder v{__version__}", style="bold white")
+    console.print("  Type [bold]help[/bold] for commands, [bold]exit[/bold] to quit.\n")
+
+    while True:
+        try:
+            line = input("KGB> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            console.print("\nGoodbye!", style="bold green")
+            break
+
+        if not line:
+            continue
+
+        if line.lower() in ("exit", "quit"):
+            console.print("Goodbye!", style="bold green")
+            break
+
+        if line.lower() == "help":
+            line = "--help"
+
+        try:
+            args = shlex.split(line)
+        except ValueError as e:
+            console.print(f"[red]Parse error:[/red] {e}")
+            continue
+
+        try:
+            app(args, standalone_mode=False)
+        except SystemExit:
+            # Typer/Click raises SystemExit on --help and errors; absorb it
+            pass
+        except Exception as e:
+            console.print(f"[red]Error:[/red] {e}")
+
+
+def main_entry():
+    """Console-scripts entry point.
+
+    - With arguments: one-shot mode (delegates to Typer app).
+    - Without arguments: launches the interactive KGB shell.
+    """
+    if len(sys.argv) > 1:
+        app()
+    else:
+        interactive_shell()
 
 
 if __name__ == "__main__":
-    app()
+    main_entry()

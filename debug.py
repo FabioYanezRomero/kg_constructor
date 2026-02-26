@@ -11,10 +11,10 @@ Set breakpoints anywhere to inspect the extraction process.
 from pathlib import Path
 
 # Import the new modular API
-from src.clients import ClientConfig, ClientFactory
-from src.domains import get_domain, ExtractionMode
-from src.builder import extract_from_text, extract_connected_graph
-from src.datasets import load_records
+from kg_constructor.clients import ClientConfig, ClientFactory
+from kg_constructor.domains import get_domain, ExtractionMode
+from kg_constructor.builder import extract_from_text, extract_connected_graph
+from kg_constructor.datasets import load_records
 
 
 # =============================================================================
@@ -33,7 +33,7 @@ ID_FIELD = "id"
 RECORD_IDS = ["UKSC-2009-0143"]  # List of record IDs to process
 
 # Domain Configuration  
-DOMAIN = "legal"  # Use: python -m src list domains
+DOMAIN = "legal"  # Use: kg_constructor list domains
 MODE = ExtractionMode.OPEN  # Options: OPEN, CLOSED
 
 # Connectivity Augmentation

@@ -5,7 +5,7 @@ description: Adds a new output format converter (e.g., CSV, RDF) to the converte
 
 # Add Converter: New Export Format
 
-This skill guides you through adding a new output format converter to `src/converters/`.
+This skill guides you through adding a new output format converter to `kg_constructor/converters/`.
 
 ## Architecture Overview
 
@@ -29,8 +29,8 @@ Data Flow:
 ```
 
 **Key Files:**
-- [graphml.py](file:///app/src/converters/graphml.py) - NetworkX graph format (Gephi, Cytoscape)
-- [__init__.py](file:///app/src/converters/__init__.py) - Public exports
+- [graphml.py](file:///app/kg_constructor/converters/graphml.py) - NetworkX graph format (Gephi, Cytoscape)
+- [__init__.py](file:///app/kg_constructor/converters/__init__.py) - Public exports
 
 ## Dependencies
 
@@ -84,7 +84,7 @@ def json_to_<format>(
 
 ## Step 2: Implement Your Converter
 
-Create `src/converters/csv.py`:
+Create `kg_constructor/converters/csv.py`:
 
 ```python
 """CSV converter for knowledge graph triples."""
@@ -223,7 +223,7 @@ __all__ = ["json_to_csv", "convert_csv_directory"]
 
 ## Step 3: Register in Module
 
-Update `src/converters/__init__.py`:
+Update `kg_constructor/converters/__init__.py`:
 
 ```python
 from .graphml import json_to_graphml, convert_json_directory
@@ -241,7 +241,7 @@ __all__ = [
 
 ## Step 4: Add CLI Subcommand
 
-Update `src/__main__.py` to add format dispatch:
+Update `kg_constructor/__main__.py` to add format dispatch:
 
 ```python
 @app.command()
@@ -254,7 +254,7 @@ def convert(
     
     \b
     Examples:
-        python -m src convert --input outputs/extracted_json --format csv
+        kg_constructor convert --input outputs/extracted_json --format csv
     """
     from .converters import convert_json_directory, convert_csv_directory
     
@@ -279,7 +279,7 @@ def convert(
 ```
 
 > [!TIP]
-> See the existing `convert` command in [__main__.py](file:///app/src/__main__.py) for structure reference.
+> See the existing `convert` command in [__main__.py](file:///app/kg_constructor/__main__.py) for structure reference.
 
 ---
 
@@ -288,7 +288,7 @@ def convert(
 ### 5.1 Check Import
 
 ```bash
-python -c "from src.converters import json_to_csv; print('OK')"
+python -c "from kg_constructor.converters import json_to_csv; print('OK')"
 ```
 
 ### 5.2 Unit Tests
@@ -296,8 +296,8 @@ python -c "from src.converters import json_to_csv; print('OK')"
 ```python
 import pytest
 from pathlib import Path
-from src.converters.csv import json_to_csv
-from src.domains import Triple
+from kg_constructor.converters.csv import json_to_csv
+from kg_constructor.domains import Triple
 
 
 def test_json_to_csv_basic(tmp_path):
@@ -386,7 +386,7 @@ def test_convert_cli_integration(tmp_path):
     """End-to-end CLI test."""
     import json
     from typer.testing import CliRunner
-    from src.__main__ import app
+    from kg_constructor.__main__ import app
     
     # Create test input
     input_dir = tmp_path / "json"

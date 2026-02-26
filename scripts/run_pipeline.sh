@@ -66,19 +66,19 @@ start_time=$(date +%s)
 
 # Step 1: Extraction
 echo "Step 1: Extracting triples..."
-python3 -m src extract --input "$INPUT_FILE" --domain "$DOMAIN" --output-dir "$OUTPUT_DIR" --client "$CLIENT"
+python3 -m kg_constructor extract --input "$INPUT_FILE" --domain "$DOMAIN" --output-dir "$OUTPUT_DIR" --client "$CLIENT"
 
 # Step 2: Augmentation
 echo -e "\nStep 2: Augmenting connectivity..."
-python3 -m src augment connectivity --input "$INPUT_FILE" --domain "$DOMAIN" --output-dir "$OUTPUT_DIR" --client "$CLIENT" --max-disconnected "$MAX_DISCONNECTED" --max-iterations "$MAX_ITERATIONS"
+python3 -m kg_constructor augment connectivity --input "$INPUT_FILE" --domain "$DOMAIN" --output-dir "$OUTPUT_DIR" --client "$CLIENT" --max-disconnected "$MAX_DISCONNECTED" --max-iterations "$MAX_ITERATIONS"
 
 # Step 3: Conversion
 echo -e "\nStep 3: Converting to GraphML..."
-python3 -m src convert --input "$OUTPUT_DIR/extracted_json"
+python3 -m kg_constructor convert --input "$OUTPUT_DIR/extracted_json"
 
 # Step 4: Visualization
 echo -e "\nStep 4: Creating visualizations..."
-python3 -m src visualize network --input "$OUTPUT_DIR/graphml" --dark-mode
+python3 -m kg_constructor visualize network --input "$OUTPUT_DIR/graphml" --dark-mode
 
 echo ""
 echo "=========================================="

@@ -1,6 +1,6 @@
 # Adding a Converter
 
-This skill documents how to add a new output format converter to `src/converters/`.
+This skill documents how to add a new output format converter to `kg_constructor/converters/`.
 
 ## Overview
 
@@ -31,8 +31,8 @@ Data Flow:
 ```
 
 **Key Files:**
-- `src/converters/graphml.py` - NetworkX graph format
-- `src/converters/__init__.py` - Public exports
+- `kg_constructor/converters/graphml.py` - NetworkX graph format
+- `kg_constructor/converters/__init__.py` - Public exports
 
 ## Dependencies
 
@@ -79,7 +79,7 @@ def json_to_<format>(
 
 ## Step 2: Implement Your Converter
 
-Create `src/converters/csv.py`:
+Create `kg_constructor/converters/csv.py`:
 
 ```python
 """CSV converter for knowledge graph triples."""
@@ -180,7 +180,7 @@ def convert_csv_directory(
 
 ## Step 3: Register in Module
 
-Update `src/converters/__init__.py`:
+Update `kg_constructor/converters/__init__.py`:
 
 ```python
 from .graphml import json_to_graphml, convert_json_directory
@@ -196,7 +196,7 @@ __all__ = [
 
 ## Step 4: Add CLI Subcommand
 
-Update `src/__main__.py`:
+Update `kg_constructor/__main__.py`:
 
 ```python
 @app.command()
@@ -226,15 +226,15 @@ def convert(
 ### Check Import
 
 ```bash
-python -c "from src.converters import json_to_csv; print('OK')"
+python -c "from kg_constructor.converters import json_to_csv; print('OK')"
 ```
 
 ### Unit Test
 
 ```python
 def test_json_to_csv_basic(tmp_path):
-    from src.converters.csv import json_to_csv
-    from src.domains import Triple
+    from kg_constructor.converters.csv import json_to_csv
+    from kg_constructor.domains import Triple
     
     triples = [
         Triple(head="Alice", relation="knows", tail="Bob"),
@@ -255,7 +255,7 @@ def test_json_to_csv_basic(tmp_path):
 
 
 def test_json_to_csv_empty_list(tmp_path):
-    from src.converters.csv import json_to_csv
+    from kg_constructor.converters.csv import json_to_csv
     import pytest
     
     with pytest.raises(ValueError, match="empty"):
@@ -264,8 +264,8 @@ def test_json_to_csv_empty_list(tmp_path):
 
 def test_json_to_csv_round_trip(tmp_path):
     """Verify data preservation through conversion."""
-    from src.converters.csv import json_to_csv
-    from src.domains import Triple
+    from kg_constructor.converters.csv import json_to_csv
+    from kg_constructor.domains import Triple
     import csv
     
     original = [Triple(head="X", relation="related_to", tail="Y")]

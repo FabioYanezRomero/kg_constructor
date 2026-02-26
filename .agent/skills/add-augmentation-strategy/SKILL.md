@@ -5,7 +5,7 @@ description: Adds a new iterative augmentation strategy (e.g., enrichment, summa
 
 # Add Augmentation Strategy: New Graph Refinement
 
-This skill guides you through adding a new augmentation strategy to the `src/builder/` module.
+This skill guides you through adding a new augmentation strategy to the `kg_constructor/builder/` module.
 
 ## Architecture Overview
 
@@ -26,8 +26,8 @@ flowchart LR
 ```
 
 **Key Files:**
-- [augmentation.py](file:///app/src/builder/augmentation.py) - Strategy Protocol, Registry, and implementations.
-- [__init__.py](file:///app/src/builder/__init__.py) - Public exports.
+- [augmentation.py](file:///app/kg_constructor/builder/augmentation.py) - Strategy Protocol, Registry, and implementations.
+- [__init__.py](file:///app/kg_constructor/builder/__init__.py) - Public exports.
 
 ---
 
@@ -56,7 +56,7 @@ class AugmentationStrategy(Protocol):
 
 ## Step 2: Implement Your Strategy
 
-Add your strategy function to `src/builder/augmentation.py`:
+Add your strategy function to `kg_constructor/builder/augmentation.py`:
 
 ```python
 from .augmentation import (
@@ -149,7 +149,7 @@ def enrichment_strategy(
 Add the prompts and examples for your strategy:
 
 ```text
-src/domains/<domain>/augmentation/enrichment/
+kg_constructor/domains/<domain>/augmentation/enrichment/
 ├── prompt.txt
 └── examples.json
 ```
@@ -168,7 +168,7 @@ src/domains/<domain>/augmentation/enrichment/
 
 ## Step 4: Add CLI Subcommand
 
-Update `src/__main__.py` to expose your strategy:
+Update `kg_constructor/__main__.py` to expose your strategy:
 
 ```python
 @augment_app.command("enrichment")
@@ -211,7 +211,7 @@ def augment_enrichment(
 ```
 
 > [!TIP]
-> For a complete reference, see the existing `augment_connectivity` command in [__main__.py](file:///app/src/__main__.py).
+> For a complete reference, see the existing `augment_connectivity` command in [__main__.py](file:///app/kg_constructor/__main__.py).
 
 ---
 
@@ -220,7 +220,7 @@ def augment_enrichment(
 ### 5.1 Check Registration
 
 ```bash
-python -c "from src.builder import list_strategies; print(list_strategies())"
+python -c "from kg_constructor.builder import list_strategies; print(list_strategies())"
 # Output: ['connectivity', 'enrichment']
 ```
 
@@ -229,8 +229,8 @@ python -c "from src.builder import list_strategies; print(list_strategies())"
 ```python
 import pytest
 from unittest.mock import MagicMock
-from src.builder.augmentation import enrichment_strategy
-from src.domains import Triple
+from kg_constructor.builder.augmentation import enrichment_strategy
+from kg_constructor.domains import Triple
 
 def test_enrichment_strategy():
     # Arrange
@@ -264,8 +264,8 @@ def test_enrichment_strategy():
 ```python
 def test_enrichment_integration():
     """End-to-end test with real domain and mock client."""
-    from src.domains import get_domain
-    from src.builder.augmentation import enrichment_strategy
+    from kg_constructor.domains import get_domain
+    from kg_constructor.builder.augmentation import enrichment_strategy
     from unittest.mock import MagicMock
     
     # Use real domain with test resources

@@ -1,6 +1,6 @@
 # LLM Clients Module
 
-The `src/clients` module provides an abstraction layer over Large Language Model (LLM) backends. It provides a unified interface to execute knowledge graph extraction and general structural generation across different providers, such as Gemini, Ollama, and LM Studio.
+The `kg_constructor/clients` module provides an abstraction layer over Large Language Model (LLM) backends. It provides a unified interface to execute knowledge graph extraction and general structural generation across different providers, such as Gemini, Ollama, and LM Studio.
 
 ## Architecture
 
@@ -25,16 +25,16 @@ Currently, the framework supports:
 - **Ollama (`ollama`)**: Local open-source model execution.
 - **LM Studio (`lmstudio`)**: Local OpenAI-compatible server endpoints.
 
-*(Provider implementations are located in the `src/clients/providers/` directory.)*
+*(Provider implementations are located in the `kg_constructor/clients/providers/` directory.)*
 
 ## Integration and Usage
 
 ### Adding a New Provider
 
 To add a new LLM provider to the framework:
-1. Create a new module in `src/clients/providers/` (e.g., `openai.py`).
+1. Create a new module in `kg_constructor/clients/providers/` (e.g., `openai.py`).
 2. Implement a class inheriting from `BaseLLMClient`, ensuring you fulfill the required abstract methods (`extract`, `generate_json`, `supports_structured_output`, `get_model_name`, `from_config`).
-3. Register the new client in `src/clients/__init__.py`:
+3. Register the new client in `kg_constructor/clients/__init__.py`:
    ```python
    from .providers import NewProviderClient
    ClientFactory.register("new_provider", NewProviderClient)
@@ -42,12 +42,12 @@ To add a new LLM provider to the framework:
 
 ### Effects on CLI Commands
 
-The clients module is tightly integrated with the main Typer CLI (`src/__main__.py`), ensuring a seamless user experience.
+The clients module is tightly integrated with the main Typer CLI (`kg_constructor/__main__.py`), ensuring a seamless user experience.
 
 #### Dynamic Client Listing
 Users can see all installed backend providers with the `list clients` wrapper, which polls the `ClientFactory` registry directly:
 ```bash
-python -m src list clients
+kg_constructor list clients
 ```
 
 #### Shared Execution Arguments

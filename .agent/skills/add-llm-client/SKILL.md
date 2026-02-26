@@ -5,7 +5,7 @@ description: Adds a new LLM client provider to the clients module. Use when impl
 
 # Add LLM Client: New Provider
 
-This skill guides you through adding a new LLM client provider to `src/clients/`.
+This skill guides you through adding a new LLM client provider to `kg_constructor/clients/`.
 
 ## Architecture Overview
 
@@ -31,9 +31,9 @@ Registration Flow:
 ```
 
 **Key Files:**
-- [base.py](file:///app/src/clients/base.py) - Abstract base class and exceptions
-- [config.py](file:///app/src/clients/config.py) - ClientConfig dataclass
-- [__init__.py](file:///app/src/clients/__init__.py) - ClientFactory registry
+- [base.py](file:///app/kg_constructor/clients/base.py) - Abstract base class and exceptions
+- [config.py](file:///app/kg_constructor/clients/config.py) - ClientConfig dataclass
+- [__init__.py](file:///app/kg_constructor/clients/__init__.py) - ClientFactory registry
 
 ## Dependencies
 
@@ -147,7 +147,7 @@ class BaseLLMClient(ABC):
 
 ## Step 2: Implement Your Client
 
-Create `src/clients/providers/groq.py`:
+Create `kg_constructor/clients/providers/groq.py`:
 
 ```python
 """Groq cloud inference client implementation."""
@@ -378,7 +378,7 @@ __all__ = ["GroqClient"]
 
 ## Step 3: Register in ClientFactory
 
-Update `src/clients/__init__.py`:
+Update `kg_constructor/clients/__init__.py`:
 
 ```python
 from .providers.groq import GroqClient
@@ -387,7 +387,7 @@ from .providers.groq import GroqClient
 ClientFactory.register("groq", GroqClient)
 ```
 
-Update `src/clients/config.py` to add the type:
+Update `kg_constructor/clients/config.py` to add the type:
 
 ```python
 ClientType = Literal["gemini", "ollama", "lmstudio", "groq"]
@@ -400,7 +400,7 @@ ClientType = Literal["gemini", "ollama", "lmstudio", "groq"]
 ### 4.1 Check Registration
 
 ```bash
-python -c "from src.clients import ClientFactory; print(ClientFactory.get_available_clients())"
+python -c "from kg_constructor.clients import ClientFactory; print(ClientFactory.get_available_clients())"
 # Output: ['gemini', 'ollama', 'lmstudio', 'groq']
 ```
 
@@ -409,9 +409,9 @@ python -c "from src.clients import ClientFactory; print(ClientFactory.get_availa
 ```python
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from src.clients import ClientFactory, ClientConfig
-from src.clients.providers.groq import GroqClient
-from src.clients.base import LLMClientError
+from kg_constructor.clients import ClientFactory, ClientConfig
+from kg_constructor.clients.providers.groq import GroqClient
+from kg_constructor.clients.base import LLMClientError
 
 
 def test_client_registered():
@@ -463,7 +463,7 @@ def test_supports_structured_output():
     assert client.supports_structured_output() is True
 
 
-@patch('src.clients.providers.groq.OpenAI')
+@patch('kg_constructor.clients.providers.groq.OpenAI')
 def test_generate_json_success(mock_openai_class):
     """Test successful JSON generation."""
     mock_client = MagicMock()
@@ -483,7 +483,7 @@ def test_generate_json_success(mock_openai_class):
     assert result == [{"head": "A", "relation": "r", "tail": "B"}]
 
 
-@patch('src.clients.providers.groq.OpenAI')
+@patch('kg_constructor.clients.providers.groq.OpenAI')
 def test_generate_json_api_error(mock_openai_class):
     """Test API error handling."""
     mock_client = MagicMock()
@@ -560,13 +560,13 @@ client.generate_json(
 
 ```bash
 # Use your new client
-python -m src extract --input data.jsonl --domain legal --client groq
+kg_constructor extract --input data.jsonl --domain legal --client groq
 
 # With custom model
-python -m src extract --input data.jsonl --domain legal --client groq --model mixtral-8x7b-32768
+kg_constructor extract --input data.jsonl --domain legal --client groq --model mixtral-8x7b-32768
 
 # With API key
-python -m src extract --input data.jsonl --domain legal --client groq --api-key sk-xxx
+kg_constructor extract --input data.jsonl --domain legal --client groq --api-key sk-xxx
 ```
 
 ---
@@ -592,8 +592,8 @@ python -m src extract --input data.jsonl --domain legal --client groq --api-key 
 ### Catching Client Errors
 
 ```python
-from src.clients import ClientFactory, ClientConfig
-from src.clients.base import LLMClientError
+from kg_constructor.clients import ClientFactory, ClientConfig
+from kg_constructor.clients.base import LLMClientError
 
 try:
     config = ClientConfig(client_type="groq", api_key="test")
@@ -618,4 +618,4 @@ Before submitting, verify your client:
 - [ ] Registered in `ClientFactory`
 - [ ] Added to `ClientType` literal
 - [ ] Tests cover factory, defaults, errors
-- [ ] CLI works: `python -m src extract --client name`
+- [ ] CLI works: `kg_constructor extract --client name`

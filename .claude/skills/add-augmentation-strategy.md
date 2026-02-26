@@ -1,6 +1,6 @@
 # Adding an Augmentation Strategy
 
-This skill documents how to add a new augmentation strategy to the `src/builder` module.
+This skill documents how to add a new augmentation strategy to the `kg_constructor/builder` module.
 
 ## Overview
 
@@ -27,8 +27,8 @@ Initial Triples        connectivity    your_strategy
 ```
 
 **Key Files:**
-- `src/builder/augmentation.py` - Strategy Protocol, Registry, implementations
-- `src/builder/__init__.py` - Public exports
+- `kg_constructor/builder/augmentation.py` - Strategy Protocol, Registry, implementations
+- `kg_constructor/builder/__init__.py` - Public exports
 
 ## Step 1: Understand the Protocol
 
@@ -52,7 +52,7 @@ Strategy-specific parameters (e.g., `max_iterations`) are passed via `**kwargs`.
 
 ## Step 2: Implement Your Strategy
 
-Add to `src/builder/augmentation.py`:
+Add to `kg_constructor/builder/augmentation.py`:
 
 ```python
 from .augmentation import (
@@ -141,7 +141,7 @@ def enrichment_strategy(
 Add prompts and examples for your strategy:
 
 ```
-src/domains/<domain>/augmentation/enrichment/
+kg_constructor/domains/<domain>/augmentation/enrichment/
 ├── prompt.txt
 └── examples.json
 ```
@@ -158,7 +158,7 @@ src/domains/<domain>/augmentation/enrichment/
 
 ## Step 4: Add CLI Subcommand
 
-Update `src/__main__.py`:
+Update `kg_constructor/__main__.py`:
 
 ```python
 @augment_app.command("enrichment")
@@ -197,14 +197,14 @@ def augment_enrichment(
             json.dump([t.model_dump() for t in triples], f, indent=2)
 ```
 
-> See existing `augment_connectivity` command in `src/__main__.py` for complete reference.
+> See existing `augment_connectivity` command in `kg_constructor/__main__.py` for complete reference.
 
 ## Step 5: Verify
 
 ### Check Registration
 
 ```bash
-python -c "from src.builder import list_strategies; print(list_strategies())"
+python -c "from kg_constructor.builder import list_strategies; print(list_strategies())"
 # Output: ['connectivity', 'enrichment']
 ```
 
@@ -213,8 +213,8 @@ python -c "from src.builder import list_strategies; print(list_strategies())"
 ```python
 def test_enrichment_strategy():
     from unittest.mock import MagicMock
-    from src.builder.augmentation import enrichment_strategy
-    from src.domains import Triple
+    from kg_constructor.builder.augmentation import enrichment_strategy
+    from kg_constructor.domains import Triple
     
     mock_client = MagicMock()
     mock_client.generate_json.return_value = [
@@ -242,8 +242,8 @@ def test_enrichment_strategy():
 
 ```python
 def test_enrichment_integration():
-    from src.domains import get_domain
-    from src.builder.augmentation import enrichment_strategy
+    from kg_constructor.domains import get_domain
+    from kg_constructor.builder.augmentation import enrichment_strategy
     from unittest.mock import MagicMock
     
     domain = get_domain("default")

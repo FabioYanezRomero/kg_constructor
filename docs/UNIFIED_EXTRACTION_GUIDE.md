@@ -30,7 +30,7 @@ This system provides a modular architecture for extracting knowledge graphs from
 ## Module Structure
 
 ```
-src/
+kg_constructor/
 ├── clients/                    # Client abstraction layer
 │   ├── base.py                # BaseLLMClient interface
 │   ├── config.py              # ClientConfig
@@ -59,21 +59,21 @@ src/
 
 ### Command-Line Interface
 
-The unified CLI is accessed via `python -m src`:
+The unified CLI is accessed via `kg_constructor`:
 
 ```bash
 # List available commands
-python -m src --help
+kg_constructor --help
 
 # List available domains and clients
-python -m src list domains
-python -m src list clients
+kg_constructor list domains
+kg_constructor list clients
 ```
 
 #### Using LM Studio (Local)
 
 ```bash
-python -m src extract \
+kg_constructor extract \
   --input data/legal/legal_background.jsonl \
   --output-dir outputs/lmstudio \
   --client lmstudio \
@@ -86,7 +86,7 @@ python -m src extract \
 #### Using Ollama (Local)
 
 ```bash
-python -m src extract \
+kg_constructor extract \
   --input data/legal/legal_background.jsonl \
   --output-dir outputs/ollama \
   --client ollama \
@@ -101,7 +101,7 @@ python -m src extract \
 ```bash
 export LANGEXTRACT_API_KEY="your-gemini-api-key"
 
-python -m src extract \
+kg_constructor extract \
   --input data/legal/legal_background.jsonl \
   --output-dir outputs/gemini \
   --client gemini \
@@ -116,17 +116,17 @@ Run extraction → augmentation → conversion → visualization:
 
 ```bash
 # Step 1: Extract triples
-python -m src extract --input data.jsonl --output-dir out --client lmstudio
+kg_constructor extract --input data.jsonl --output-dir out --client lmstudio
 
 # Step 2: Augment connectivity
-python -m src augment connectivity --input data.jsonl --output-dir out --client lmstudio
+kg_constructor augment connectivity --input data.jsonl --output-dir out --client lmstudio
 
 # Step 3: Convert to GraphML
-python -m src convert --input out/extracted_json --output out/graphml
+kg_constructor convert --input out/extracted_json --output out/graphml
 
 # Step 4: Visualize
-python -m src visualize network --input out/graphml --output out/network_viz
-python -m src visualize extraction --input data.jsonl --triples out/extracted_json --output out/extraction_viz
+kg_constructor visualize network --input out/graphml --output out/network_viz
+kg_constructor visualize extraction --input data.jsonl --triples out/extracted_json --output out/extraction_viz
 ```
 
 Or use the test scripts for a complete pipeline:
@@ -203,10 +203,10 @@ outputs/
 
 ## Domain Configuration
 
-Domains are configured in `src/domains/{domain}/`:
+Domains are configured in `kg_constructor/domains/{domain}/`:
 
 ```
-src/domains/legal/
+kg_constructor/domains/legal/
 ├── extraction/
 │   ├── prompt_open.txt
 │   ├── prompt_constrained.txt

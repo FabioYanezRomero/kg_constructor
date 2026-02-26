@@ -35,7 +35,7 @@ python3 << 'PYTHON_SCRIPT'
 import os
 import json
 import sys
-sys.path.insert(0, '/app/src')
+sys.path.insert(0, '/app')
 
 # Load API key
 with open('/app/.env', 'r') as f:
@@ -113,7 +113,7 @@ python3 << 'PYTHON_SCRIPT'
 import os
 import json
 import sys
-sys.path.insert(0, '/app/src')
+sys.path.insert(0, '/app')
 
 # Load API key
 with open('/app/.env', 'r') as f:
@@ -190,7 +190,7 @@ python3 << 'PYTHON_SCRIPT'
 import os
 import json
 import sys
-sys.path.insert(0, '/app/src')
+sys.path.insert(0, '/app')
 
 # Load API key
 with open('/app/.env', 'r') as f:
@@ -270,7 +270,7 @@ python3 << 'PYTHON_SCRIPT'
 import os
 import json
 import sys
-sys.path.insert(0, '/app/src')
+sys.path.insert(0, '/app')
 
 # Load API key
 with open('/app/.env', 'r') as f:

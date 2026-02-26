@@ -5,7 +5,7 @@ description: Manage knowledge domains (e.g., Medical, Finance). Covers adding ne
 
 # Add Domain: New Knowledge Domain
 
-This skill guides you through adding a new knowledge domain to `src/domains/`.
+This skill guides you through adding a new knowledge domain to `kg_constructor/domains/`.
 
 ## Architecture Overview
 
@@ -32,9 +32,9 @@ Registration Flow:
 ```
 
 **Key Files:**
-- [registry.py](file:///app/src/domains/registry.py) - Registration decorator and lookup
-- [base.py](file:///app/src/domains/base.py) - Base class with auto-discovery
-- [models.py](file:///app/src/domains/models.py) - Triple and extraction Pydantic models
+- [registry.py](file:///app/kg_constructor/domains/registry.py) - Registration decorator and lookup
+- [base.py](file:///app/kg_constructor/domains/base.py) - Base class with auto-discovery
+- [models.py](file:///app/kg_constructor/domains/models.py) - Triple and extraction Pydantic models
 
 ## Dependencies
 
@@ -47,7 +47,7 @@ Registration Flow:
 ## Directory Structure
 
 ```text
-src/domains/<domain_name>/
+kg_constructor/domains/<domain_name>/
 ├── __init__.py                 # Domain class with @domain decorator
 ├── extraction/
 │   ├── prompt_open.txt         # Open extraction prompt
@@ -143,7 +143,7 @@ Identify the head entity, the relationship, and the tail entity.
 
 ## Step 2: Implement the Domain Class
 
-Create `src/domains/medical/__init__.py`:
+Create `kg_constructor/domains/medical/__init__.py`:
 
 ```python
 """Medical knowledge domain for clinical document analysis."""
@@ -214,7 +214,7 @@ Create `schema.json` to define allowed types for constrained extraction:
 
 ## Step 4: Register in Domain Hub
 
-Update `src/domains/__init__.py`:
+Update `kg_constructor/domains/__init__.py`:
 
 ```python
 # This import triggers the @domain decorator → registration
@@ -228,7 +228,7 @@ from . import medical
 ### 5.1 Check Registration
 
 ```bash
-python -c "from src.domains import list_available_domains; print(list_available_domains())"
+python -c "from kg_constructor.domains import list_available_domains; print(list_available_domains())"
 # Output: ['default', 'legal', 'medical']
 ```
 
@@ -237,7 +237,7 @@ python -c "from src.domains import list_available_domains; print(list_available_
 ```python
 import pytest
 from pathlib import Path
-from src.domains import get_domain, list_available_domains, DomainResourceError
+from kg_constructor.domains import get_domain, list_available_domains, DomainResourceError
 
 
 def test_domain_registered():
@@ -288,7 +288,7 @@ def test_augmentation_strategy_exists():
 
 def test_missing_resource_error(tmp_path):
     """Test error when resource file is missing."""
-    from src.domains.base import KnowledgeDomain
+    from kg_constructor.domains.base import KnowledgeDomain
     
     domain = KnowledgeDomain(root_dir=tmp_path)
     
@@ -302,7 +302,7 @@ def test_root_dir_override(tmp_path):
     (tmp_path / "extraction" / "prompt_open.txt").write_text("Test prompt")
     (tmp_path / "extraction" / "examples.json").write_text("[]")
     
-    from src.domains.base import KnowledgeDomain
+    from kg_constructor.domains.base import KnowledgeDomain
     domain = KnowledgeDomain(root_dir=tmp_path)
     
     assert domain.extraction.prompt == "Test prompt"
@@ -330,14 +330,14 @@ Use `root_dir=` when testing or using shared resources:
 
 ```python
 from pathlib import Path
-from src.domains.base import KnowledgeDomain
+from kg_constructor.domains.base import KnowledgeDomain
 
 # Testing with mock resources
 domain = KnowledgeDomain(root_dir=Path("/tmp/test_resources"))
 
 # Using shared resource directory
-from src.domains.medical import MedicalDomain
-domain = MedicalDomain(root_dir=Path("src/domains/shared_medical"))
+from kg_constructor.domains.medical import MedicalDomain
+domain = MedicalDomain(root_dir=Path("kg_constructor/domains/shared_medical"))
 ```
 
 ---
@@ -358,13 +358,13 @@ Validation occurs **on first access**:
 
 ```bash
 # Extract with your domain
-python -m src extract --input data.jsonl --domain medical
+kg_constructor extract --input data.jsonl --domain medical
 
 # Augment with connectivity strategy
-python -m src augment connectivity --input data.jsonl --domain medical
+kg_constructor augment connectivity --input data.jsonl --domain medical
 
 # Use constrained mode with schema
-python -m src extract --input data.jsonl --domain medical --mode constrained
+kg_constructor extract --input data.jsonl --domain medical --mode constrained
 ```
 
 ---
@@ -376,19 +376,19 @@ python -m src extract --input data.jsonl --domain medical --mode constrained
 ```python
 # Debug: Check if file exists
 from pathlib import Path
-domain_dir = Path("src/domains/medical")
+domain_dir = Path("kg_constructor/domains/medical")
 print((domain_dir / "extraction" / "prompt_open.txt").exists())
 ```
 
 **Solutions:**
-- Verify file exists: `ls src/domains/medical/extraction/`
+- Verify file exists: `ls kg_constructor/domains/medical/extraction/`
 - Check filename matches exactly (case-sensitive)
 - Ensure `__init__.py` is in same directory as resource folders
 
 ### "ValueError: Unknown domain 'medical'"
 
 **Solutions:**
-- Add import in `src/domains/__init__.py`: `from . import medical`
+- Add import in `kg_constructor/domains/__init__.py`: `from . import medical`
 - Restart Python interpreter to reload modules
 - Verify decorator syntax: `@domain("medical")` not `@Domain("medical")`
 
@@ -412,7 +412,7 @@ print((domain_dir / "extraction" / "prompt_open.txt").exists())
 ### Catching Errors
 
 ```python
-from src.domains import get_domain, DomainResourceError
+from kg_constructor.domains import get_domain, DomainResourceError
 
 try:
     domain = get_domain("medical")
@@ -435,6 +435,6 @@ Before submitting, verify your domain:
 - [ ] Prompts do NOT include format instructions
 - [ ] `examples.json` matches ExtractionExample schema
 - [ ] Augmentation examples use input/output structure
-- [ ] Import added in `src/domains/__init__.py`
+- [ ] Import added in `kg_constructor/domains/__init__.py`
 - [ ] Tests pass for registration, resources, schema
-- [ ] CLI works: `python -m src extract --domain name`
+- [ ] CLI works: `kg_constructor extract --domain name`

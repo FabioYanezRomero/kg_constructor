@@ -5,6 +5,7 @@ PYTHON ?= python3
 PIP ?= $(VENV)/bin/pip
 
 install: $(VENV)/bin/activate
+	$(PIP) install -e .
 
 $(VENV)/bin/activate:
 	$(PYTHON) -m venv $(VENV)
@@ -12,10 +13,10 @@ $(VENV)/bin/activate:
 	$(PIP) install -r requirements.txt
 
 run:
-	PYTHONPATH=src $(VENV)/bin/python -m kg_constructor $(ARGS)
+	$(VENV)/bin/kg_constructor $(ARGS)
 
 format:
-	$(VENV)/bin/python -m black src
+	$(VENV)/bin/python -m black kg_constructor
 
 clean:
 	rm -rf $(VENV)

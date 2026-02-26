@@ -5,7 +5,7 @@ description: Adds a new input format loader (e.g., Parquet, Excel) to the datase
 
 # Add Dataset Format: New Input Loader
 
-This skill guides you through adding a new input format loader to `src/datasets/__init__.py`.
+This skill guides you through adding a new input format loader to `kg_constructor/datasets/__init__.py`.
 
 ## Architecture Overview
 
@@ -30,7 +30,7 @@ Data Flow:
 ```
 
 **Key File:**
-- [__init__.py](file:///app/src/datasets/__init__.py) - All loaders and dispatcher
+- [__init__.py](file:///app/kg_constructor/datasets/__init__.py) - All loaders and dispatcher
 
 ## Dependencies
 
@@ -93,7 +93,7 @@ def _load_<format>(path: Path) -> list[dict[str, Any]]:
 
 ## Step 2: Implement Your Loader
 
-Add to `src/datasets/__init__.py`:
+Add to `kg_constructor/datasets/__init__.py`:
 
 ```python
 def _load_parquet(path: Path) -> list[dict[str, Any]]:
@@ -183,7 +183,7 @@ def load_records(path: Path, text_field: str = "text", ...):
 ### 4.1 Check Import
 
 ```bash
-python -c "from src.datasets import load_records; print('OK')"
+python -c "from kg_constructor.datasets import load_records; print('OK')"
 ```
 
 ### 4.2 Unit Tests
@@ -191,7 +191,7 @@ python -c "from src.datasets import load_records; print('OK')"
 ```python
 import pytest
 from pathlib import Path
-from src.datasets import load_records, detect_format, DataLoadError
+from kg_constructor.datasets import load_records, detect_format, DataLoadError
 
 
 def test_load_parquet_basic(tmp_path):
@@ -271,7 +271,7 @@ def test_parquet_cli_integration(tmp_path):
     parquet_file = tmp_path / "test.parquet"
     df.to_parquet(parquet_file)
     
-    from src.__main__ import app
+    from kg_constructor.__main__ import app
     runner = CliRunner()
     
     result = runner.invoke(app, [
@@ -320,13 +320,13 @@ Dataset loaders are used automatically by extraction commands:
 
 ```bash
 # Auto-detect format from extension
-python -m src extract --input data.parquet --domain legal
+kg_constructor extract --input data.parquet --domain legal
 
 # Custom field names
-python -m src extract --input data.csv --text-field content --id-field doc_id
+kg_constructor extract --input data.csv --text-field content --id-field doc_id
 
 # Limit records for testing
-python -m src extract --input large.jsonl --domain legal --limit 10
+kg_constructor extract --input large.jsonl --domain legal --limit 10
 ```
 
 ---
