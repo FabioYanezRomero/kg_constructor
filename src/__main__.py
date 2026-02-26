@@ -39,6 +39,7 @@ from .datasets import load_records
 from .converters import convert_json_directory
 from .visualization import batch_visualize_graphs, EntityVisualizer
 from .domains import list_available_domains, ExtractionMode
+from .pipeline import PipelineRunner, PipelineContext, get_step
 
 # Initialize Typer apps
 app = typer.Typer(
@@ -129,8 +130,111 @@ def list_clients():
 
 
 # =============================================================================
+# PIPELINE Command
+# =============================================================================
+
+@app.command("run-pipeline")
+def run_pipeline(
+    input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file (.jsonl, .json, or .csv)", exists=True),
+    output_dir: Path = typer.Option("outputs/pipeline_run", "--output-dir", "-o", help="Directory to save pipeline artifacts"),
+    domain: str = typer.Option(..., "--domain", "-d", help="Knowledge domain"),
+    mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
+    client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c", help="LLM client type"),
+    model: Optional[str] = typer.Option(None, "--model", help="Model ID"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", help="API key"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL"),
+    text_field: str = typer.Option("text", "--text-field", help="Field name containing text"),
+    id_field: str = typer.Option("id", "--id-field", help="Field name containing record IDs"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of records"),
+    temperature: float = typer.Option(0.0, "--temp", help="Sampling temperature"),
+    # Logical Pipeline Steps Toggles
+    do_extract: bool = typer.Option(False, "--extract", help="Run extraction step"),
+    do_augment: bool = typer.Option(False, "--augment", help="Run connectivity augmentation step"),
+    do_convert: bool = typer.Option(False, "--convert", help="Convert resulting triples to GraphML"),
+    do_visualize: bool = typer.Option(False, "--visualize", help="Create visual HTMLs from triples"),
+    # General arguments
+    no_progress: bool = typer.Option(False, "--no-progress", help="Hide progress bar"),
+    max_workers: Optional[int] = typer.Option(None, "--workers", help="Max parallel workers"),
+    timeout: int = typer.Option(120, "--timeout", help="Request timeout (seconds)"),
+):
+    """Run a dynamically composed pipeline based on provided logical flags.
+    
+    \b
+    Examples:
+        python -m src run-pipeline --input data.jsonl --domain legal --extract --client ollama
+        python -m src run-pipeline --input data.jsonl --domain legal --extract --augment --convert --visualize --client ollama
+    """
+    if not any([do_extract, do_augment, do_convert, do_visualize]):
+        console.print("[yellow]Warning: No pipeline steps selected. Use --extract, --augment, --convert, or --visualize.[/yellow]")
+        return
+        
+    console.print(f"[bold blue]Pipeline Orchestrator Launching[/bold blue]")
+    
+    try:
+        # Load records and initialize contexts
+        records = load_records(input_file, text_field, id_field, None, limit)
+        contexts = [PipelineContext(record_id=str(r["id"]), text=str(r["text"])) for r in records]
+        console.print(f"Loaded {len(contexts)} contexts from {input_file.name}")
+        
+        # Setup cross-cutting utilities
+        from .domains import get_domain
+        domain_obj = get_domain(domain, extraction_mode=mode)
+        config = _build_client_config(client, model, api_key, base_url, temperature, no_progress, max_workers, timeout)
+        llm_client = ClientFactory.create(config)
+        output_dir = Path(output_dir)
+        
+        # Assemble Pipeline Steps Sequence
+        steps_sequence = []
+        
+        if do_extract:
+            steps_sequence.append(get_step("extract")(client=llm_client, domain=domain_obj, temperature=temperature))
+            
+        if do_augment:
+            steps_sequence.append(get_step("augment")(client=llm_client, domain=domain_obj, temperature=temperature))
+            
+        if do_extract or do_augment:
+            json_dir = output_dir / "extracted_json"
+            steps_sequence.append(get_step("export-json")(output_dir=json_dir))
+            
+        if do_convert:
+            graphml_dir = output_dir / "graphml"
+            steps_sequence.append(get_step("convert")(output_dir=graphml_dir))
+            
+        if do_visualize:
+            network_dir = output_dir / "visualizations"
+            extraction_viz_dir = output_dir / "visualizations_extraction"
+            steps_sequence.append(get_step("visualize-network")(output_dir=network_dir))
+            steps_sequence.append(get_step("visualize-extraction")(output_dir=extraction_viz_dir))
+            
+        # Execute Pipeline Sequence
+        console.print(f"[bold green]Assembled {len(steps_sequence)} pipeline steps.[/bold green]")
+        runner = PipelineRunner(steps=steps_sequence)
+        
+        results = runner.execute_batch(contexts, max_workers=max_workers, show_progress=not no_progress)
+        
+        # Determine Success Criteria
+        successes = sum(1 for c in results if not c.errors)
+        errors = sum(1 for c in results if c.errors)
+        
+        console.print(f"\n[bold green]✓ Pipeline execution complete.[/bold green]")
+        console.print(f"Success: {successes} | Errors: {errors}")
+        console.print(f"Artifacts located at: {output_dir}")
+        
+        if errors > 0:
+            console.print("\n[bold red]Errors detail:[/bold red]")
+            for c in results:
+                if c.errors:
+                    console.print(f"  [{c.record_id}]: {c.errors[0]}")
+                    
+    except Exception as e:
+        console.print(f"[bold red]Pipeline Error:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+# =============================================================================
 # EXTRACT Command (Step 1)
 # =============================================================================
+
 
 @app.command()
 def extract(
