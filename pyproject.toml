@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kg-constructor"
+name = "kgb"
 version = "0.1.0"
-description = "Knowledge Graph Constructor - Extract, augment, convert, and visualize knowledge graphs from text"
+description = "KGB - Knowledge Graph Builder: Extract, augment, convert, and visualize knowledge graphs from text"
 requires-python = ">=3.11"
 dependencies = [
     "datasets>=2.19.0,<4.0.0",
@@ -25,7 +25,7 @@ dependencies = [
 dev = ["black>=23.12"]
 
 [project.scripts]
-kg_constructor = "kg_constructor.__main__:main_entry"
+kgb = "kgb.__main__:main_entry"
 
 [tool.setuptools.packages.find]
-include = ["kg_constructor*"]
+include = ["kgb*"]

@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY kg_constructor ./kg_constructor
+COPY kgb ./kgb
 COPY README.md ./
 COPY Makefile ./
 COPY LICENSE ./
@@ -23,4 +23,4 @@ RUN pip install --no-cache-dir -e .
 
 RUN mkdir -p "${OUTPUT_DIR}"
 
-ENTRYPOINT ["kg_constructor"]
+ENTRYPOINT ["kgb"]

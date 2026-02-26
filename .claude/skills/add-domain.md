@@ -1,6 +1,6 @@
 # Adding a Knowledge Domain
 
-This skill documents how to add a new knowledge domain to `kg_constructor/domains/`.
+This skill documents how to add a new knowledge domain to `kgb/domains/`.
 
 ## Overview
 
@@ -43,7 +43,7 @@ Registration Flow:
 ## Directory Structure
 
 ```text
-kg_constructor/domains/<domain_name>/
+kgb/domains/<domain_name>/
 ├── __init__.py                 # Domain class with @domain decorator
 ├── extraction/
 │   ├── prompt_open.txt         # Open extraction prompt
@@ -120,7 +120,7 @@ Focus on explicit relationships between entities.
 
 ## Step 2: Implement the Domain Class
 
-Create `kg_constructor/domains/medical/__init__.py`:
+Create `kgb/domains/medical/__init__.py`:
 
 ```python
 """Medical knowledge domain for clinical document analysis."""
@@ -170,7 +170,7 @@ Access with: `domain.schema.entity_types`, `domain.schema.relation_types`
 
 ## Step 4: Register in Domain Hub
 
-Update `kg_constructor/domains/__init__.py`:
+Update `kgb/domains/__init__.py`:
 
 ```python
 from . import medical  # Triggers @domain decorator
@@ -181,14 +181,14 @@ from . import medical  # Triggers @domain decorator
 ### Check Registration
 
 ```bash
-python -c "from kg_constructor.domains import list_available_domains; print(list_available_domains())"
+python -c "from kgb.domains import list_available_domains; print(list_available_domains())"
 ```
 
 ### Unit Tests
 
 ```python
 import pytest
-from kg_constructor.domains import get_domain, list_available_domains, DomainResourceError
+from kgb.domains import get_domain, list_available_domains, DomainResourceError
 
 
 def test_domain_registered():
@@ -220,13 +220,13 @@ def test_root_dir_override(tmp_path):
     (tmp_path / "extraction" / "prompt_open.txt").write_text("Test")
     (tmp_path / "extraction" / "examples.json").write_text("[]")
     
-    from kg_constructor.domains.base import KnowledgeDomain
+    from kgb.domains.base import KnowledgeDomain
     domain = KnowledgeDomain(root_dir=tmp_path)
     assert domain.extraction.prompt == "Test"
 
 
 def test_missing_resource_error(tmp_path):
-    from kg_constructor.domains.base import KnowledgeDomain
+    from kgb.domains.base import KnowledgeDomain
     domain = KnowledgeDomain(root_dir=tmp_path)
     
     with pytest.raises(DomainResourceError):
@@ -248,20 +248,20 @@ self._root_dir = Path(inspect.getfile(self.__class__)).parent
 
 ```bash
 # Extract with your domain
-kg_constructor extract --input data.jsonl --domain medical
+kgb extract --input data.jsonl --domain medical
 
 # Augment with connectivity
-kg_constructor augment connectivity --input data.jsonl --domain medical
+kgb augment connectivity --input data.jsonl --domain medical
 ```
 
 ## Troubleshooting
 
 ### "DomainResourceError: Resource not found"
-- Verify file exists: `ls kg_constructor/domains/medical/extraction/`
+- Verify file exists: `ls kgb/domains/medical/extraction/`
 - Check filename matches exactly (case-sensitive)
 
 ### "ValueError: Unknown domain 'medical'"
-- Add import in `kg_constructor/domains/__init__.py`: `from . import medical`
+- Add import in `kgb/domains/__init__.py`: `from . import medical`
 - Restart Python interpreter
 
 ### "ValidationError: examples[0]..."
@@ -271,7 +271,7 @@ kg_constructor augment connectivity --input data.jsonl --domain medical
 ## Error Handling
 
 ```python
-from kg_constructor.domains import get_domain, DomainResourceError
+from kgb.domains import get_domain, DomainResourceError
 
 try:
     domain = get_domain("medical")
@@ -288,5 +288,5 @@ except ValueError as e:
 - [ ] `@domain("name")` decorator applied
 - [ ] Prompts do NOT include format instructions
 - [ ] `examples.json` matches ExtractionExample schema
-- [ ] Import added in `kg_constructor/domains/__init__.py`
+- [ ] Import added in `kgb/domains/__init__.py`
 - [ ] Tests pass for registration and resources

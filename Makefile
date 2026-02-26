@@ -13,10 +13,10 @@ $(VENV)/bin/activate:
 	$(PIP) install -r requirements.txt
 
 run:
-	$(VENV)/bin/kg_constructor $(ARGS)
+	$(VENV)/bin/kgb $(ARGS)
 
 format:
-	$(VENV)/bin/python -m black kg_constructor
+	$(VENV)/bin/python -m black kgb
 
 clean:
 	rm -rf $(VENV)

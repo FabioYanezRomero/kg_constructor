@@ -7,5 +7,6 @@ processed/
 processed_test/
 visualizations/
 __pycache__
+*.egg-info/
 .env
 *_log_*

@@ -1,6 +1,6 @@
 # Adding a Visualization
 
-This skill documents how to add a new visualization type to the `kg_constructor/visualization/` module.
+This skill documents how to add a new visualization type to the `kgb/visualization/` module.
 
 ## Overview
 
@@ -30,9 +30,9 @@ Data Flow:
 ```
 
 **Key Files:**
-- `kg_constructor/visualization/network_viz.py` - Graph topology using Plotly + NetworkX
-- `kg_constructor/visualization/entity_viz.py` - Text entity highlighting using langextract
-- `kg_constructor/visualization/__init__.py` - Public exports
+- `kgb/visualization/network_viz.py` - Graph topology using Plotly + NetworkX
+- `kgb/visualization/entity_viz.py` - Text entity highlighting using langextract
+- `kgb/visualization/__init__.py` - Public exports
 
 ## Dependencies
 
@@ -73,7 +73,7 @@ def visualize_<type>(
 
 ## Step 2: Implement Your Visualization
 
-Create `kg_constructor/visualization/timeline_viz.py`:
+Create `kgb/visualization/timeline_viz.py`:
 
 ```python
 """Timeline visualization for temporal knowledge graphs."""
@@ -203,7 +203,7 @@ def _extract_events_from_triples(triples, date_field):
 
 ## Step 3: Register in Module
 
-Update `kg_constructor/visualization/__init__.py`:
+Update `kgb/visualization/__init__.py`:
 
 ```python
 from .network_viz import visualize_graph, batch_visualize_graphs
@@ -220,7 +220,7 @@ __all__ = [
 
 ## Step 4: Add CLI Subcommand
 
-Update `kg_constructor/__main__.py`:
+Update `kgb/__main__.py`:
 
 ```python
 @visualize_app.command("timeline")
@@ -259,22 +259,22 @@ def visualize_timeline_cmd(
             console.print(f"[red]Error {json_file.name}: {e}[/red]")
 ```
 
-> See existing `visualize_network` command in `kg_constructor/__main__.py` for complete reference.
+> See existing `visualize_network` command in `kgb/__main__.py` for complete reference.
 
 ## Step 5: Verify
 
 ### Check Import
 
 ```bash
-python -c "from kg_constructor.visualization import visualize_timeline; print('OK')"
+python -c "from kgb.visualization import visualize_timeline; print('OK')"
 ```
 
 ### Unit Test
 
 ```python
 def test_visualize_timeline_from_triples(tmp_path):
-    from kg_constructor.visualization.timeline_viz import visualize_timeline
-    from kg_constructor.domains import Triple
+    from kgb.visualization.timeline_viz import visualize_timeline
+    from kgb.domains import Triple
     
     triples = [
         Triple(head="EventA", relation="occurred", tail="LocationX", date="2024-01-15"),
@@ -295,7 +295,7 @@ def test_visualize_timeline_from_triples(tmp_path):
 def test_timeline_cli_integration(tmp_path):
     import json
     from typer.testing import CliRunner
-    from kg_constructor.__main__ import app
+    from kgb.__main__ import app
     
     input_dir = tmp_path / "json"
     input_dir.mkdir()

@@ -22,7 +22,7 @@ MODEL_NAME="gemini-3-flash-preview"  # For gemini: gemini-2.0-flash, gemini-2.5-
 TEMPERATURE=0.0
 
 # Base directory detection (Docker vs local)
-if [ -d "/app/kg_constructor" ]; then
+if [ -d "/app/kgb" ]; then
     BASE_DIR="/app"
 else
     BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -35,7 +35,7 @@ ID_FIELD="id"  # Field name containing record IDs
 RECORD_IDS="UKSC-2009-0143"  # Specific record ID(s) to process (comma-separated, or empty for all)
 
 # Domain Configuration
-DOMAIN="legal"  # Use: kg_constructor list domains
+DOMAIN="legal"  # Use: kgb list domains
 
 # Extraction Mode
 MODE="open"  # Options: open, closed
@@ -156,7 +156,7 @@ echo "==========================================================================
 echo "STEP 1: EXTRACTING TRIPLES"
 echo "================================================================================"
 
-if ! python3 -m kg_constructor extract $CLI_OPTS; then
+if ! python3 -m kgb extract $CLI_OPTS; then
     echo "ERROR: Extraction failed"
     exit 1
 fi
@@ -169,7 +169,7 @@ echo "==========================================================================
 echo "STEP 2: AUGMENTING CONNECTIVITY"
 echo "================================================================================"
 
-if ! python3 -m kg_constructor augment connectivity $CLI_OPTS \
+if ! python3 -m kgb augment connectivity $CLI_OPTS \
     --max-disconnected $MAX_DISCONNECTED \
     --max-iterations $MAX_ITERATIONS; then
     echo "ERROR: Augmentation failed"
@@ -187,7 +187,7 @@ echo "==========================================================================
 JSON_DIR="$OUTPUT_DIR/extracted_json"
 GRAPHML_DIR="$OUTPUT_DIR/graphml"
 
-if ! python3 -m kg_constructor convert --input "$JSON_DIR" --output "$GRAPHML_DIR"; then
+if ! python3 -m kgb convert --input "$JSON_DIR" --output "$GRAPHML_DIR"; then
     echo "ERROR: Conversion failed"
     exit 1
 fi
@@ -209,7 +209,7 @@ if [ "$CREATE_NETWORK_VIZ" = true ]; then
         VIZ_OPTS="$VIZ_OPTS --dark-mode"
     fi
 
-    if ! python3 -m kg_constructor visualize network $VIZ_OPTS; then
+    if ! python3 -m kgb visualize network $VIZ_OPTS; then
         echo "WARNING: Network visualization failed"
     fi
 fi
@@ -223,7 +223,7 @@ if [ "$CREATE_EXTRACTION_VIZ" = true ]; then
 
     EXTRACTION_VIZ_DIR="$OUTPUT_DIR/extraction_viz"
     
-    if ! python3 -m kg_constructor visualize extraction \
+    if ! python3 -m kgb visualize extraction \
         --input "$INPUT_FILE" \
         --triples "$JSON_DIR" \
         --output "$EXTRACTION_VIZ_DIR" \
@@ -257,7 +257,7 @@ tree -L 2 "$OUTPUT_DIR" 2>/dev/null || ls -R "$OUTPUT_DIR"
 echo ""
 echo "================================================================================"
 echo "To explore available commands, run:"
-echo "  kg_constructor --help"
-echo "  kg_constructor list domains"
-echo "  kg_constructor list clients"
+echo "  kgb --help"
+echo "  kgb list domains"
+echo "  kgb list clients"
 echo "================================================================================"

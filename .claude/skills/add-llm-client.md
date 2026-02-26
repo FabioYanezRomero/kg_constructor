@@ -1,6 +1,6 @@
 # Adding an LLM Client
 
-This skill documents how to add a new LLM client provider to `kg_constructor/clients/`.
+This skill documents how to add a new LLM client provider to `kgb/clients/`.
 
 ## Overview
 
@@ -95,7 +95,7 @@ class BaseLLMClient(ABC):
 
 ## Step 2: Implement Your Client
 
-Create `kg_constructor/clients/providers/groq.py`:
+Create `kgb/clients/providers/groq.py`:
 
 ```python
 """Groq cloud inference client."""
@@ -236,14 +236,14 @@ class GroqClient(BaseLLMClient):
 
 ## Step 3: Register Client
 
-Update `kg_constructor/clients/__init__.py`:
+Update `kgb/clients/__init__.py`:
 
 ```python
 from .providers.groq import GroqClient
 ClientFactory.register("groq", GroqClient)
 ```
 
-Update `kg_constructor/clients/config.py`:
+Update `kgb/clients/config.py`:
 
 ```python
 ClientType = Literal["gemini", "ollama", "lmstudio", "groq"]
@@ -256,12 +256,12 @@ ClientType = Literal["gemini", "ollama", "lmstudio", "groq"]
 ```python
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from kg_constructor.clients.providers.groq import GroqClient
-from kg_constructor.clients.base import LLMClientError
+from kgb.clients.providers.groq import GroqClient
+from kgb.clients.base import LLMClientError
 
 
 def test_client_from_config():
-    from kg_constructor.clients import ClientConfig
+    from kgb.clients import ClientConfig
     
     config = ClientConfig(
         client_type="groq",
@@ -284,7 +284,7 @@ def test_get_model_name():
     assert client.get_model_name() == "groq/llama-3.1-70b-versatile"
 
 
-@patch('kg_constructor.clients.providers.groq.OpenAI')
+@patch('kgb.clients.providers.groq.OpenAI')
 def test_generate_json_success(mock_openai):
     mock_client = MagicMock()
     mock_openai.return_value = mock_client
@@ -297,7 +297,7 @@ def test_generate_json_success(mock_openai):
     assert result == [{"head": "A"}]
 
 
-@patch('kg_constructor.clients.providers.groq.OpenAI')
+@patch('kgb.clients.providers.groq.OpenAI')
 def test_generate_json_error(mock_openai):
     mock_openai.return_value.chat.completions.create.side_effect = Exception("API error")
     
@@ -335,8 +335,8 @@ client.generate_json(
 ## CLI Usage
 
 ```bash
-kg_constructor extract --input data.jsonl --domain legal --client groq
-kg_constructor extract --input data.jsonl --client groq --model mixtral-8x7b
+kgb extract --input data.jsonl --domain legal --client groq
+kgb extract --input data.jsonl --client groq --model mixtral-8x7b
 ```
 
 ## Key Principles

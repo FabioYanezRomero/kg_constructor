@@ -44,7 +44,7 @@ with open('/app/.env', 'r') as f:
             key, val = line.strip().split('=', 1)
             os.environ[key] = val
 
-from kg_constructor.extractor import KnowledgeGraphExtractor
+from kgb.extractor import KnowledgeGraphExtractor
 
 # Test text
 text = """John Smith, a senior software engineer at Google Inc., filed a patent 
@@ -122,7 +122,7 @@ with open('/app/.env', 'r') as f:
             key, val = line.strip().split('=', 1)
             os.environ[key] = val
 
-from kg_constructor.extractor import KnowledgeGraphExtractor
+from kgb.extractor import KnowledgeGraphExtractor
 
 # Legal domain text - should leverage legal examples
 text = """Attorney Sarah Johnson from Morrison & Foerster represents Tesla Inc. 
@@ -199,7 +199,7 @@ with open('/app/.env', 'r') as f:
             key, val = line.strip().split('=', 1)
             os.environ[key] = val
 
-from kg_constructor.extractor import KnowledgeGraphExtractor
+from kgb.extractor import KnowledgeGraphExtractor
 
 # Load all 3 sample records to create a longer document
 with open('/app/data/legal/sample_data.json', 'r') as f:
@@ -279,7 +279,7 @@ with open('/app/.env', 'r') as f:
             key, val = line.strip().split('=', 1)
             os.environ[key] = val
 
-from kg_constructor.extractor import KnowledgeGraphExtractor
+from kgb.extractor import KnowledgeGraphExtractor
 
 # Text designed to have disconnected components initially
 text = """John Smith filed a lawsuit against Microsoft. Sarah Johnson is an attorney 

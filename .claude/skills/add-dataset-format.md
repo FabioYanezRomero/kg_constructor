@@ -1,6 +1,6 @@
 # Adding a Dataset Format
 
-This skill documents how to add a new input format loader to `kg_constructor/datasets/__init__.py`.
+This skill documents how to add a new input format loader to `kgb/datasets/__init__.py`.
 
 ## Overview
 
@@ -80,7 +80,7 @@ def _load_<format>(path: Path) -> list[dict[str, Any]]:
 
 ## Step 2: Implement Your Loader
 
-Add to `kg_constructor/datasets/__init__.py`:
+Add to `kgb/datasets/__init__.py`:
 
 ```python
 def _load_parquet(path: Path) -> list[dict[str, Any]]:
@@ -144,7 +144,7 @@ elif format_type == 'parquet':  # Add new format
 ### Check Import
 
 ```bash
-python -c "from kg_constructor.datasets import load_records; print('OK')"
+python -c "from kgb.datasets import load_records; print('OK')"
 ```
 
 ### Unit Test
@@ -152,7 +152,7 @@ python -c "from kg_constructor.datasets import load_records; print('OK')"
 ```python
 def test_load_parquet_basic(tmp_path):
     import pandas as pd
-    from kg_constructor.datasets import load_records
+    from kgb.datasets import load_records
     
     df = pd.DataFrame({
         "doc_id": ["1", "2"],
@@ -176,7 +176,7 @@ def test_load_parquet_basic(tmp_path):
 
 def test_load_parquet_missing_field(tmp_path):
     import pandas as pd
-    from kg_constructor.datasets import load_records, DataLoadError
+    from kgb.datasets import load_records, DataLoadError
     import pytest
     
     df = pd.DataFrame({"wrong_field": ["A", "B"]})
@@ -188,7 +188,7 @@ def test_load_parquet_missing_field(tmp_path):
 
 
 def test_detect_format_parquet():
-    from kg_constructor.datasets import detect_format
+    from kgb.datasets import detect_format
     from pathlib import Path
     
     assert detect_format(Path("data.parquet")) == "parquet"
@@ -221,13 +221,13 @@ Original fields are preserved alongside normalized `text` and `id` keys.
 
 ```bash
 # Auto-detect format from extension
-kg_constructor extract --input data.parquet --domain legal
+kgb extract --input data.parquet --domain legal
 
 # Custom field names
-kg_constructor extract --input data.csv --text-field content --id-field doc_id
+kgb extract --input data.csv --text-field content --id-field doc_id
 
 # Limit records for testing
-kg_constructor extract --input large.jsonl --domain legal --limit 10
+kgb extract --input large.jsonl --domain legal --limit 10
 ```
 
 ## Key Principles

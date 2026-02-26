@@ -13,7 +13,7 @@ Commands:
     list clients         - List available LLM client types
 
 Interactive mode:
-    Run `kg_constructor` with no arguments to enter the interactive shell.
+    Run `kgb` with no arguments to enter the interactive shell.
 """
 
 from __future__ import annotations
@@ -167,8 +167,8 @@ def run_pipeline(
     
     \b
     Examples:
-        kg_constructor run-pipeline --input data.jsonl --domain legal --extract --client ollama
-        kg_constructor run-pipeline --input data.jsonl --domain legal --extract --augment --convert --visualize --client ollama
+        kgb run-pipeline --input data.jsonl --domain legal --extract --client ollama
+        kgb run-pipeline --input data.jsonl --domain legal --extract --augment --convert --visualize --client ollama
     """
     if not any([do_extract, do_augment, do_convert, do_visualize]):
         console.print("[yellow]Warning: No pipeline steps selected. Use --extract, --augment, --convert, or --visualize.[/yellow]")
@@ -266,7 +266,7 @@ def extract(
     
     \b
     Examples:
-        kg_constructor extract --input data.jsonl --domain legal
+        kgb extract --input data.jsonl --domain legal
     """
     console.print(f"[bold blue]Step 1: Extraction[/bold blue]")
     console.print(f"Input: [dim]{input_file}[/dim] | Domain: [green]{domain}[/green]")
@@ -312,7 +312,7 @@ def extract(
         
         console.print(f"\n[bold green]✓ Extraction complete.[/bold green]")
         console.print(f"Output: {json_dir} ({len(output_files)} files)")
-        console.print(f"\n[dim]Next: kg_constructor augment connectivity --input {input_file} --domain {domain}[/dim]")
+        console.print(f"\n[dim]Next: kgb augment connectivity --input {input_file} --domain {domain}[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
@@ -348,7 +348,7 @@ def augment_connectivity(
     
     \b
     Examples:
-        kg_constructor augment connectivity --input data.jsonl --domain legal
+        kgb augment connectivity --input data.jsonl --domain legal
     """
     console.print(f"[bold blue]Step 2: Augmentation (Connectivity)[/bold blue]")
     console.print(f"Target: ≤ {max_disconnected} components | Max iterations: {max_iterations}")
@@ -401,7 +401,7 @@ def augment_connectivity(
         
         console.print(f"\n[bold green]✓ Augmentation complete.[/bold green]")
         console.print(f"Output: {json_dir} ({len(output_files)} files)")
-        console.print(f"\n[dim]Next: kg_constructor convert --input {json_dir}[/dim]")
+        console.print(f"\n[dim]Next: kgb convert --input {json_dir}[/dim]")
         
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
@@ -429,7 +429,7 @@ def convert(
     
     \b
     Examples:
-        kg_constructor convert --input outputs/extracted_json
+        kgb convert --input outputs/extracted_json
     """
     console.print(f"[bold blue]Converting JSON to GraphML[/bold blue]")
     
@@ -439,7 +439,7 @@ def convert(
         graphml_files = convert_json_directory(input_dir, graphml_dir)
         console.print(f"\n[bold green]✓ Converted {len(graphml_files)} files[/bold green]")
         console.print(f"Output: {graphml_dir}")
-        console.print(f"\n[dim]Next: kg_constructor visualize network --input {graphml_dir}[/dim]")
+        console.print(f"\n[dim]Next: kgb visualize network --input {graphml_dir}[/dim]")
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise typer.Exit(code=1)
@@ -460,7 +460,7 @@ def visualize_network(
     
     \b
     Examples:
-        kg_constructor visualize network --input outputs/graphml --dark-mode
+        kgb visualize network --input outputs/graphml --dark-mode
     """
     console.print(f"[bold blue]Creating Network Visualizations[/bold blue]")
     
@@ -490,7 +490,7 @@ def visualize_extraction(
     
     \b
     Examples:
-        kg_constructor visualize extraction --input data.jsonl --triples outputs/extracted_json
+        kgb visualize extraction --input data.jsonl --triples outputs/extracted_json
     """
     console.print(f"[bold blue]Creating Extraction Visualizations[/bold blue]")
     

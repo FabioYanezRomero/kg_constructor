@@ -37,13 +37,13 @@ pip install -r requirements.txt
 
 ```bash
 # Extract with Gemini
-kg_constructor extract --input data.jsonl --domain legal --client gemini
+kgb extract --input data.jsonl --domain legal --client gemini
 
 # Extract with Ollama
-kg_constructor extract --input data.jsonl --domain default --client ollama --model llama3.1
+kgb extract --input data.jsonl --domain default --client ollama --model llama3.1
 
 # Extract with LM Studio
-kg_constructor extract --input data.csv --domain legal --client lmstudio --base-url http://localhost:1234/v1
+kgb extract --input data.csv --domain legal --client lmstudio --base-url http://localhost:1234/v1
 ```
 
 ---
@@ -63,7 +63,7 @@ kg_constructor extract --input data.csv --domain legal --client lmstudio --base-
 ### Step 1: Extract
 
 ```bash
-kg_constructor extract \
+kgb extract \
   --input data.jsonl \
   --domain legal \
   --client gemini \
@@ -87,7 +87,7 @@ kg_constructor extract \
 ### Step 2: Augment
 
 ```bash
-kg_constructor augment connectivity \
+kgb augment connectivity \
   --input data.jsonl \
   --domain legal \
   --client gemini \
@@ -101,17 +101,17 @@ kg_constructor augment connectivity \
 ### Convert
 
 ```bash
-kg_constructor convert --input outputs/extracted_json --output outputs/graphml
+kgb convert --input outputs/extracted_json --output outputs/graphml
 ```
 
 ### Visualize
 
 ```bash
 # Network visualization
-kg_constructor visualize network --input outputs/graphml --dark-mode
+kgb visualize network --input outputs/graphml --dark-mode
 
 # Entity extraction visualization
-kg_constructor visualize extraction --input data.jsonl --triples outputs/extracted_json
+kgb visualize extraction --input data.jsonl --triples outputs/extracted_json
 ```
 
 ---
@@ -146,7 +146,7 @@ outputs/kg_extraction/
 ### Module Structure
 
 ```
-kg_constructor/
+kgb/
 ├── __init__.py              # Package initialization
 ├── __main__.py              # CLI entry point (Typer-based)
 ├── builder/                 # Graph construction
@@ -180,7 +180,7 @@ kg_constructor/
 All LLM backends implement the `BaseLLMClient` interface:
 
 ```python
-from kg_constructor.clients import ClientFactory, ClientConfig
+from kgb.clients import ClientFactory, ClientConfig
 
 config = ClientConfig(
     client_type="gemini",
@@ -200,7 +200,7 @@ result = client.extract(
 Domains define prompts and examples for specific knowledge areas:
 
 ```python
-from kg_constructor.domains import get_domain, list_available_domains
+from kgb.domains import get_domain, list_available_domains
 
 # List available domains
 print(list_available_domains())  # ['default', 'legal']
@@ -247,7 +247,7 @@ Skills are located in `.agent/skills/` and provide step-by-step guides with:
 ### Domain Structure
 
 ```
-kg_constructor/domains/<domain>/
+kgb/domains/<domain>/
 ├── __init__.py                 # Domain class with @domain decorator
 ├── extraction/
 │   ├── prompt_open.txt         # Open extraction prompt
@@ -298,11 +298,11 @@ export LANGEXTRACT_API_KEY="your-gemini-api-key"
 
 ```bash
 # Quick validation
-kg_constructor extract --input data/sample.jsonl --domain default --limit 1
+kgb extract --input data/sample.jsonl --domain default --limit 1
 
 # List available resources
-kg_constructor list domains
-kg_constructor list clients
+kgb list domains
+kgb list clients
 ```
 
 ---

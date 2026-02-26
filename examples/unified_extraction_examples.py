@@ -4,19 +4,19 @@ This script shows how to use the new modular architecture to extract
 knowledge graphs using different LLM backends (Gemini, Ollama, LM Studio).
 
 New Architecture:
-    - kg_constructor.clients: LLM client abstraction (GeminiClient, OllamaClient, LMStudioClient)
-    - kg_constructor.domains: Knowledge domains with prompts and examples
-    - kg_constructor.builder: Extraction and augmentation logic
-    - kg_constructor.converters: Output format converters (GraphML, etc.)
-    - kg_constructor.visualization: Interactive visualizations
+    - kgb.clients: LLM client abstraction (GeminiClient, OllamaClient, LMStudioClient)
+    - kgb.domains: Knowledge domains with prompts and examples
+    - kgb.builder: Extraction and augmentation logic
+    - kgb.converters: Output format converters (GraphML, etc.)
+    - kgb.visualization: Interactive visualizations
 """
 
 from pathlib import Path
 
 # Import from the new modular structure
-from kg_constructor.clients import ClientConfig, ClientFactory, GeminiClient
-from kg_constructor.domains import get_domain, list_available_domains, Triple
-from kg_constructor.builder import extract_from_text, extract_connected_graph, list_strategies
+from kgb.clients import ClientConfig, ClientFactory, GeminiClient
+from kgb.domains import get_domain, list_available_domains, Triple
+from kgb.builder import extract_from_text, extract_connected_graph, list_strategies
 
 
 def example_gemini_api():
@@ -322,11 +322,11 @@ def main():
     print("UNIFIED KNOWLEDGE GRAPH EXTRACTION EXAMPLES")
     print("=" * 80)
     print("\nNew Modular Architecture:")
-    print("  • kg_constructor.clients - LLM client abstraction layer")
-    print("  • kg_constructor.domains - Knowledge domains with prompts/examples")
-    print("  • kg_constructor.builder - Extraction and augmentation logic")
-    print("  • kg_constructor.converters - Output format converters")
-    print("  • kg_constructor.visualization - Interactive visualizations")
+    print("  • kgb.clients - LLM client abstraction layer")
+    print("  • kgb.domains - Knowledge domains with prompts/examples")
+    print("  • kgb.builder - Extraction and augmentation logic")
+    print("  • kgb.converters - Output format converters")
+    print("  • kgb.visualization - Interactive visualizations")
     print("\n")
 
     try:
@@ -360,9 +360,9 @@ def main():
         print("\nNote: Local model examples (Ollama, LM Studio) require")
         print("running servers and are shown for reference only.")
         print("\nCLI Usage:")
-        print("  kg_constructor extract --help")
-        print("  kg_constructor list domains")
-        print("  kg_constructor list clients")
+        print("  kgb extract --help")
+        print("  kgb list domains")
+        print("  kgb list clients")
 
     except Exception as e:
         print(f"\nError running examples: {e}")

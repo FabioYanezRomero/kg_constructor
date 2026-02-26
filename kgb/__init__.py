@@ -1,10 +1,10 @@
 """Knowledge graph constructor package.
 
 Primary interface is the CLI:
-    kg_constructor extract --input data.jsonl --domain legal
-    kg_constructor augment connectivity --input data.jsonl --domain legal
-    kg_constructor convert --input outputs/extracted_json
-    kg_constructor visualize --input outputs/graphml
+    kgb extract --input data.jsonl --domain legal
+    kgb augment connectivity --input data.jsonl --domain legal
+    kgb convert --input outputs/extracted_json
+    kgb visualize --input outputs/graphml
 """
 
 from __future__ import annotations
