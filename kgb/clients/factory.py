@@ -2,13 +2,35 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, TypeVar
 
 from .base import BaseLLMClient, LLMClientError
 from .config import ClientConfig, ClientType
 
 if TYPE_CHECKING:
     pass
+
+T = TypeVar("T", bound=BaseLLMClient)
+
+
+def client(name: str) -> Callable[[type[T]], type[T]]:
+    """Decorator to register a client class with the factory.
+
+    Usage:
+        @client("gemini")
+        class GeminiClient(BaseLLMClient):
+            pass
+
+    Args:
+        name: The client type name to register under.
+
+    Returns:
+        A decorator that registers the class and returns it unchanged.
+    """
+    def decorator(cls: type[T]) -> type[T]:
+        ClientFactory.register(name, cls)
+        return cls
+    return decorator
 
 
 class ClientFactory:
@@ -18,7 +40,7 @@ class ClientFactory:
     LLM client types based on configuration. It uses a registry pattern
     where each client class registers itself with its type identifier.
 
-    The registry is populated in __init__.py.
+    The registry is populated via the @client decorator on each provider class.
 
     Supported client types are dynamically determined by the registry.
 
@@ -38,7 +60,7 @@ class ClientFactory:
         ['gemini', 'ollama', 'lmstudio']
     """
 
-    # Registry of available client classes - populated by __init__.py
+    # Registry of available client classes - populated by @client decorator
     _client_registry: dict[ClientType, type[BaseLLMClient]] = {}
 
     @classmethod
@@ -121,4 +143,4 @@ class ClientFactory:
         return client_type in cls._client_registry
 
 
-__all__ = ["ClientFactory"]
+__all__ = ["ClientFactory", "client"]

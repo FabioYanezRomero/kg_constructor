@@ -16,10 +16,10 @@ import networkx as nx
 
 def normalize_entity_name(name: str) -> str:
     """Normalize entity name by stripping whitespace.
-    
+
     Args:
         name: Original entity name
-        
+
     Returns:
         Normalized entity name
     """
@@ -30,28 +30,28 @@ def normalize_entity_name(name: str) -> str:
 
 def get_canonical_name(name: str, entity_map: dict[str, str]) -> str:
     """Get canonical form of entity name using case-insensitive matching.
-    
+
     Args:
         name: Entity name to normalize
         entity_map: Dictionary mapping lowercase names to canonical forms
-        
+
     Returns:
         Canonical entity name
     """
     normalized = normalize_entity_name(name)
     if not normalized:
         return ""
-    
+
     key = normalized.lower()
-    
+
     if key in entity_map:
         return entity_map[key]
-    
+
     entity_map[key] = normalized
     return normalized
 
 
-from ..domains import Triple
+from ...domains import Triple
 
 
 def json_to_graphml(
@@ -59,20 +59,20 @@ def json_to_graphml(
     output_path: Path | str | None = None
 ) -> nx.DiGraph:
     """Convert a list of triples to a NetworkX DiGraph.
-    
-    Normalizes entity names to avoid disconnected components due to 
+
+    Normalizes entity names to avoid disconnected components due to
     case/whitespace variations.
-    
+
     Args:
         triples: List of extracted triples (Triple objects or dicts)
         output_path: Optional path to save GraphML file
-        
+
     Returns:
         NetworkX directed graph
     """
     G = nx.DiGraph()
     entity_map: dict[str, str] = {}
-    
+
     # Ensure we have Triple objects
     validated_triples: list[Triple] = []
     for t in triples:
@@ -83,32 +83,32 @@ def json_to_graphml(
                 validated_triples.append(Triple(**t))
             except Exception:
                 continue
-    
+
     for t in validated_triples:
         head = get_canonical_name(t.head, entity_map)
         tail = get_canonical_name(t.tail, entity_map)
-        
+
         if not head or not tail:
             continue
-        
+
         # Add nodes
         if head not in G.nodes():
             G.add_node(head)
         if tail not in G.nodes():
             G.add_node(tail)
-        
+
         # Build edge attributes
         edge_attrs = {
             "relation": t.relation,
             "inference": str(t.inference)
         }
-        
+
         G.add_edge(head, tail, **edge_attrs)
-    
+
     # Save if path provided
     if output_path:
         nx.write_graphml(G, str(output_path))
-    
+
     return G
 
 
@@ -117,20 +117,20 @@ def convert_json_directory(
     output_dir: Path | str
 ) -> list[Path]:
     """Convert all JSON files in a directory to GraphML format.
-    
+
     Args:
         input_dir: Directory containing JSON files
         output_dir: Directory to save GraphML files
-        
+
     Returns:
         List of paths to created GraphML files
     """
     input_dir = Path(input_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     graphml_files = []
-    
+
     for json_file in input_dir.glob("*.json"):
         with open(json_file, "r", encoding="utf-8") as f:
             try:
@@ -138,17 +138,17 @@ def convert_json_directory(
             except json.JSONDecodeError:
                 print(f"Skipping {json_file}: Invalid JSON")
                 continue
-        
+
         if not isinstance(data, list):
             print(f"Skipping {json_file}: Not a list of triples")
             continue
-        
+
         output_path = output_dir / f"{json_file.stem}.graphml"
         G = json_to_graphml(data, output_path)
-        
+
         print(f"Converted {json_file.name}: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
         graphml_files.append(output_path)
-    
+
     return graphml_files
 
 

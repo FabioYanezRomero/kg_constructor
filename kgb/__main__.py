@@ -39,8 +39,8 @@ from rich.console import Console
 from rich.table import Table
 
 from .clients import ClientConfig, ClientFactory
-from .datasets import load_records
-from .converters import convert_json_directory
+from .io.readers import load_records
+from .io.writers import convert_json_directory
 from .visualization import batch_visualize_graphs, EntityVisualizer
 from .domains import list_available_domains, ExtractionMode
 from .pipeline import PipelineRunner, PipelineContext, get_step

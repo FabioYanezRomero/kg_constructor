@@ -81,11 +81,11 @@ def ExtractionMode(*args: Any, **kwargs: Any) -> Any:
 
 def load_records(*args: Any, **kwargs: Any) -> Any:
     """Load records from JSONL/JSON/CSV file."""
-    from .datasets import load_records as _impl
+    from .io.readers import load_records as _impl
     return _impl(*args, **kwargs)
 
 
 def json_to_graphml(*args: Any, **kwargs: Any) -> Any:
     """Convert triples to GraphML format."""
-    from .converters import json_to_graphml as _impl
+    from .io.writers import json_to_graphml as _impl
     return _impl(*args, **kwargs)

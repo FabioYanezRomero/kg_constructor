@@ -17,11 +17,13 @@ import langextract as lx
 
 from ..base import BaseLLMClient, LLMClientError
 from ..defaults import load_provider_defaults
+from ..factory import client
 
 if TYPE_CHECKING:
     from ..config import ClientConfig
 
 
+@client("gemini")
 class GeminiClient(BaseLLMClient):
     """Client for Google Gemini models using langextract.
 

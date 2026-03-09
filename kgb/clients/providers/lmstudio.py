@@ -12,6 +12,7 @@ from langextract.core import exceptions
 
 from ..base import BaseLLMClient, LLMClientError
 from ..defaults import load_provider_defaults
+from ..factory import client
 
 if TYPE_CHECKING:
     from ..config import ClientConfig
@@ -119,6 +120,7 @@ class LMStudioLanguageModel(OpenAILanguageModel):
             ) from e
 
 
+@client("lmstudio")
 class LMStudioClient(BaseLLMClient):
     """Client for LM Studio local models via langextract.
 

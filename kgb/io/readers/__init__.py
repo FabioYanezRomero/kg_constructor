@@ -26,10 +26,10 @@ class DataLoadError(Exception):
 
 def detect_format(path: Path) -> str:
     """Detect file format from extension.
-    
+
     Returns:
         One of: 'jsonl', 'json', 'csv'
-        
+
     Raises:
         DataLoadError: If format cannot be determined
     """
@@ -55,34 +55,34 @@ def load_records(
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Load records from a file.
-    
+
     Supports JSONL, JSON, and CSV formats (auto-detected by extension).
-    
+
     Args:
         path: Path to input file
         text_field: Name of the field containing text (default: "text")
         id_field: Name of the field containing record IDs (default: "id")
         record_id: Optional list of record IDs to load
         limit: Optional limit on number of records
-        
+
     Returns:
         List of records, each with at least 'id' and 'text' keys (normalized)
-        
+
     Raises:
         DataLoadError: If file cannot be loaded or parsed
     """
     if not path.exists():
         raise DataLoadError(f"File not found: {path}", path)
-    
+
     format_type = detect_format(path)
-    
+
     if format_type == 'jsonl':
         records = _load_jsonl(path)
     elif format_type == 'json':
         records = _load_json(path)
     else:  # csv
         records = _load_csv(path)
-    
+
     # Normalize field names and validate
     normalized = []
     for i, record in enumerate(records):
@@ -90,7 +90,7 @@ def load_records(
             continue
         if limit and len(normalized) >= limit:
             break
-            
+
         if text_field not in record:
             raise DataLoadError(
                 f"Missing text field '{text_field}' in record {i}",
@@ -103,16 +103,16 @@ def load_records(
                 path,
                 line_number=i + 1
             )
-        
+
         # Normalize to standard field names
         normalized_record = dict(record)
         if text_field != "text":
             normalized_record["text"] = record[text_field]
         if id_field != "id":
             normalized_record["id"] = record[id_field]
-        
+
         normalized.append(normalized_record)
-    
+
     return normalized
 
 
@@ -142,10 +142,10 @@ def _load_json(path: Path) -> list[dict[str, Any]]:
             data = json.load(f)
     except json.JSONDecodeError as e:
         raise DataLoadError(f"Invalid JSON: {e}", path) from e
-    
+
     if not isinstance(data, list):
         raise DataLoadError("JSON file must contain an array of objects", path)
-    
+
     return data
 
 

@@ -4,13 +4,8 @@ from __future__ import annotations
 
 from .base import BaseLLMClient, LLMClientError
 from .config import ClientConfig, ClientType
-from .factory import ClientFactory
+from .factory import ClientFactory, client
 from .providers import GeminiClient, OllamaClient, LMStudioClient
-
-# Register all client types with the factory
-ClientFactory.register("gemini", GeminiClient)
-ClientFactory.register("ollama", OllamaClient)
-ClientFactory.register("lmstudio", LMStudioClient)
 
 __all__ = [
     "BaseLLMClient",

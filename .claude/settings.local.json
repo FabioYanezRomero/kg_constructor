@@ -22,7 +22,10 @@
       "Bash(git commit:*)",
       "Bash(source:*)",
       "Bash(pip install:*)",
-      "Bash(kgb list:*)"
+      "Bash(kgb list:*)",
+      "Bash(/Users/fabioyanezromero/Documents/GitHub/kg_constructor/.venv/bin/python3:*)",
+      "Bash(find:*)",
+      "Bash(.venv/bin/python3:*)"
     ]
   }
 }

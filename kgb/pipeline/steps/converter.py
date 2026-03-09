@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...converters.graphml import json_to_graphml
+from ...io.writers.graphml import json_to_graphml
 from ..context import PipelineContext
 from ..step import register_step
 

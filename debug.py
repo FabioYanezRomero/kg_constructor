@@ -14,7 +14,7 @@ from pathlib import Path
 from kgb.clients import ClientConfig, ClientFactory
 from kgb.domains import get_domain, ExtractionMode
 from kgb.builder import extract_from_text, extract_connected_graph
-from kgb.datasets import load_records
+from kgb.io.readers import load_records
 
 
 # =============================================================================
