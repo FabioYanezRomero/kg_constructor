@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
-ClientType = Literal["gemini", "ollama", "lmstudio"]
+ClientType = str
 
 
 @dataclass

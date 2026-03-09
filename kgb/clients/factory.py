@@ -18,8 +18,7 @@ class ClientFactory:
     LLM client types based on configuration. It uses a registry pattern
     where each client class registers itself with its type identifier.
 
-    The registry is populated in __init__.py after all client classes
-    are imported, ensuring no circular import issues.
+    The registry is populated in __init__.py.
 
     Supported client types are dynamically determined by the registry.
 

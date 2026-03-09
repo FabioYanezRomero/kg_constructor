@@ -11,6 +11,7 @@ from langextract.core import types as core_types
 from langextract.core import exceptions
 
 from ..base import BaseLLMClient, LLMClientError
+from ..defaults import load_provider_defaults
 
 if TYPE_CHECKING:
     from ..config import ClientConfig
@@ -127,11 +128,11 @@ class LMStudioClient(BaseLLMClient):
 
     def __init__(
         self,
-        model_id: str = "local-model",
-        base_url: str = "http://localhost:1234/v1",
-        api_key: str = "lm-studio",
-        max_workers: int = 5,
-        batch_length: int = 5,
+        model_id: str | None = None,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        max_workers: int | None = None,
+        batch_length: int | None = None,
         max_char_buffer: int = 8000,
         show_progress: bool = True,
         timeout: int = 120
@@ -139,20 +140,21 @@ class LMStudioClient(BaseLLMClient):
         """Initialize LM Studio client.
 
         Args:
-            model_id: Model identifier (use the model name from LM Studio)
-            base_url: LM Studio server URL (default: http://localhost:1234/v1)
-            api_key: API key (LM Studio uses "lm-studio" by default)
-            max_workers: Maximum parallel workers (keep lower for local models)
-            batch_length: Number of chunks per batch (keep lower for local)
+            model_id: Model identifier (see configs/lmstudio.json for default)
+            base_url: LM Studio server URL (see configs/lmstudio.json for default)
+            api_key: API key (see configs/lmstudio.json for default)
+            max_workers: Maximum parallel workers (see configs/lmstudio.json)
+            batch_length: Number of chunks per batch (see configs/lmstudio.json)
             max_char_buffer: Maximum characters for inference
             show_progress: Whether to show progress bar
             timeout: Request timeout in seconds
         """
-        self.model_id = model_id
-        self.base_url = base_url
-        self.api_key = api_key
-        self.max_workers = max_workers
-        self.batch_length = batch_length
+        _defaults = load_provider_defaults("lmstudio")
+        self.model_id = model_id or _defaults["model_id"]
+        self.base_url = base_url or _defaults["base_url"]
+        self.api_key = api_key or _defaults["api_key"]
+        self.max_workers = max_workers if max_workers is not None else _defaults["max_workers"]
+        self.batch_length = batch_length if batch_length is not None else _defaults["batch_length"]
         self.max_char_buffer = max_char_buffer
         self.show_progress = show_progress
         self.timeout = timeout
@@ -269,11 +271,7 @@ class LMStudioClient(BaseLLMClient):
             traceback.print_exc()  # Print to stderr
             raise LLMClientError(f"LM Studio extraction failed: {e}") from e
 
-    def get_model_name(self) -> str:
-        """Return the LM Studio model identifier."""
-        return f"lmstudio/{self.model_id}"
-
-    def generate_json(
+    def augment(
         self,
         text: str,
         prompt_description: str,
@@ -282,9 +280,9 @@ class LMStudioClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any
     ) -> list[dict[str, Any]]:
-        """Generate structured JSON items directly using LM Studio.
+        """Generate augmentation triples directly using LM Studio.
 
-        This bypasses langextract to allow for unconstrained generation without
+        This bypasses langextract to allow for ungrounded inference without
         the overhead of character-level source grounding. Used for bridging step.
 
         Args:
@@ -391,27 +389,15 @@ IMPORTANT: Respond with ONLY a valid JSON array. No markdown code blocks, no exp
         except Exception as e:
             raise LLMClientError(f"LM Studio JSON generation failed: {e}") from e
 
-    def supports_structured_output(self) -> bool:
-        """LM Studio generally doesn't support native structured output."""
-        return False
-
     @classmethod
     def from_config(cls, config: "ClientConfig") -> "LMStudioClient":
-        """Create an LMStudioClient from a ClientConfig.
-        
-        Applies LM Studio-specific defaults for any unset values:
-        - model_id: "local-model"
-        - base_url: "http://localhost:1234/v1"
-        - api_key: "lm-studio"
-        - max_workers: 5 (lower for local models)
-        - batch_length: 5 (lower for local models)
-        """
+        """Create an LMStudioClient from a ClientConfig."""
         return cls(
-            model_id=config.model_id or "local-model",
-            base_url=config.base_url or "http://localhost:1234/v1",
-            api_key=config.api_key or "lm-studio",
-            max_workers=config.max_workers if config.max_workers is not None else 5,
-            batch_length=config.batch_length if config.batch_length is not None else 5,
+            model_id=config.model_id,
+            base_url=config.base_url,
+            api_key=config.api_key,
+            max_workers=config.max_workers,
+            batch_length=config.batch_length,
             max_char_buffer=config.max_char_buffer,
             show_progress=config.show_progress,
             timeout=config.timeout,

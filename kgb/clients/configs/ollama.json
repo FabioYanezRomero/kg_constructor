@@ -1,0 +1,6 @@
+{
+  "model_id": "llama3.1",
+  "base_url": "http://localhost:11434",
+  "max_workers": 5,
+  "batch_length": 5
+}

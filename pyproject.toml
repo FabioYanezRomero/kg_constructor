@@ -29,3 +29,6 @@ kgb = "kgb.__main__:main_entry"
 
 [tool.setuptools.packages.find]
 include = ["kgb*"]
+
+[tool.setuptools.package-data]
+"kgb.clients" = ["configs/*.json"]

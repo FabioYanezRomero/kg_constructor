@@ -54,7 +54,7 @@ def example_gemini_api():
         record_id="example-gemini"
     )
 
-    print(f"\nExtracted {len(triples)} triples using {client.get_model_name()}:")
+    print(f"\nExtracted {len(triples)} triples using {client.model_id}:")
     for i, triple in enumerate(triples, 1):
         print(f"\n{i}. {triple.head} --[{triple.relation}]--> {triple.tail}")
         print(f"   Inference: {triple.inference}")
@@ -89,7 +89,7 @@ def example_ollama_local():
     that the merger would create significant value for shareholders. Regulatory
     approval is expected within six months."""
 
-    print(f"Using model: {client.get_model_name()}")
+    print(f"Using model: {client.model_id}")
     print("Note: This example requires Ollama to be running locally")
     print("Start Ollama: ollama serve")
     print("Pull model: ollama pull llama3.1\n")
@@ -120,7 +120,7 @@ def example_lmstudio_local():
     # Create client
     client = ClientFactory.create(config)
 
-    print(f"Using model: {client.get_model_name()}")
+    print(f"Using model: {client.model_id}")
     print("Note: This example requires LM Studio server running")
     print("1. Start LM Studio")
     print("2. Load a model in the UI")
@@ -147,8 +147,7 @@ def example_direct_client_usage():
         max_workers=10
     )
 
-    print(f"Using client: {client.get_model_name()}")
-    print(f"Supports structured output: {client.supports_structured_output()}")
+    print(f"Using client: {client.model_id}")
 
     # You can use the client directly for extraction with langextract
     # The extract() method accepts text, prompt, examples, and format_type

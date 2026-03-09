@@ -6,6 +6,7 @@ from langextract.core import types as core_types
 from langextract.core import exceptions as lx_exceptions
 
 from ..base import BaseLLMClient, LLMClientError
+from ..defaults import load_provider_defaults
 
 if TYPE_CHECKING:
     from ..config import ClientConfig
@@ -75,10 +76,10 @@ class OllamaClient(BaseLLMClient):
 
     def __init__(
         self,
-        model_id: str = "llama3.1",
-        base_url: str = "http://localhost:11434",
-        max_workers: int = 5,
-        batch_length: int = 5,
+        model_id: str | None = None,
+        base_url: str | None = None,
+        max_workers: int | None = None,
+        batch_length: int | None = None,
         max_char_buffer: int = 8000,
         show_progress: bool = True,
         timeout: int = 120
@@ -86,18 +87,19 @@ class OllamaClient(BaseLLMClient):
         """Initialize Ollama client.
 
         Args:
-            model_id: Ollama model name (e.g., "llama3.1", "mistral", "phi3")
-            base_url: Ollama server URL
-            max_workers: Maximum parallel workers (keep lower for local models)
-            batch_length: Number of chunks per batch (keep lower for local)
+            model_id: Ollama model name (see configs/ollama.json for default)
+            base_url: Ollama server URL (see configs/ollama.json for default)
+            max_workers: Maximum parallel workers (see configs/ollama.json)
+            batch_length: Number of chunks per batch (see configs/ollama.json)
             max_char_buffer: Maximum characters for inference
             show_progress: Whether to show progress bar
             timeout: Request timeout in seconds
         """
-        self.model_id = model_id
-        self.base_url = base_url
-        self.max_workers = max_workers
-        self.batch_length = batch_length
+        _defaults = load_provider_defaults("ollama")
+        self.model_id = model_id or _defaults["model_id"]
+        self.base_url = base_url or _defaults["base_url"]
+        self.max_workers = max_workers if max_workers is not None else _defaults["max_workers"]
+        self.batch_length = batch_length if batch_length is not None else _defaults["batch_length"]
         self.max_char_buffer = max_char_buffer
         self.show_progress = show_progress
         self.timeout = timeout
@@ -216,11 +218,7 @@ class OllamaClient(BaseLLMClient):
         except Exception as e:
             raise LLMClientError(f"Ollama extraction failed: {e}") from e
 
-    def get_model_name(self) -> str:
-        """Return the Ollama model identifier."""
-        return f"ollama/{self.model_id}"
-
-    def generate_json(
+    def augment(
         self,
         text: str,
         prompt_description: str,
@@ -229,9 +227,9 @@ class OllamaClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any
     ) -> list[dict[str, Any]]:
-        """Generate structured JSON items directly using Ollama.
+        """Generate augmentation triples directly using Ollama.
 
-        This bypasses langextract to allow for unconstrained generation without
+        This bypasses langextract to allow for ungrounded inference without
         the overhead of character-level source grounding. Used for bridging step.
 
         Args:
@@ -345,25 +343,14 @@ Each object MUST have at minimum: "head", "relation", "tail" fields."""
         except Exception as e:
             raise LLMClientError(f"Ollama JSON generation failed: {e}") from e
 
-    def supports_structured_output(self) -> bool:
-        """Ollama generally doesn't support native structured output."""
-        return False
-
     @classmethod
     def from_config(cls, config: "ClientConfig") -> "OllamaClient":
-        """Create an OllamaClient from a ClientConfig.
-        
-        Applies Ollama-specific defaults for any unset values:
-        - model_id: "llama3.1"
-        - base_url: "http://localhost:11434"
-        - max_workers: 5 (lower for local models)
-        - batch_length: 5 (lower for local models)
-        """
+        """Create an OllamaClient from a ClientConfig."""
         return cls(
-            model_id=config.model_id or "llama3.1",
-            base_url=config.base_url or "http://localhost:11434",
-            max_workers=config.max_workers if config.max_workers is not None else 5,
-            batch_length=config.batch_length if config.batch_length is not None else 5,
+            model_id=config.model_id,
+            base_url=config.base_url,
+            max_workers=config.max_workers,
+            batch_length=config.batch_length,
             max_char_buffer=config.max_char_buffer,
             show_progress=config.show_progress,
             timeout=config.timeout,

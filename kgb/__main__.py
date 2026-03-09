@@ -27,7 +27,6 @@ absl.logging.set_verbosity(absl.logging.ERROR)
 import json
 import shlex
 import sys
-from enum import Enum
 from pathlib import Path
 from typing import Optional, Any
 from dotenv import load_dotenv
@@ -73,16 +72,23 @@ app.add_typer(list_app, name="list")
 
 console = Console()
 
+def _available_client_types() -> list[str]:
+    """Return the registered client types."""
+    return sorted(ClientFactory.get_available_clients())
 
-class ClientType(str, Enum):
-    """Supported LLM client backends."""
-    GEMINI = "gemini"
-    OLLAMA = "ollama"
-    LMSTUDIO = "lmstudio"
+
+def _validate_client_type(value: str) -> str:
+    """Validate CLI client selection against the factory registry."""
+    if ClientFactory.is_registered(value):
+        return value
+    available = ", ".join(_available_client_types()) or "none"
+    raise typer.BadParameter(
+        f"Unsupported client type '{value}'. Available types: {available}"
+    )
 
 
 def _build_client_config(
-    client: ClientType,
+    client: str,
     model: Optional[str],
     api_key: Optional[str],
     base_url: Optional[str],
@@ -93,7 +99,7 @@ def _build_client_config(
 ) -> ClientConfig:
     """Build ClientConfig from CLI options."""
     config_kwargs = {
-        "client_type": client.value,
+        "client_type": client,
         "temperature": temperature,
         "show_progress": not no_progress,
         "timeout": timeout,
@@ -145,7 +151,13 @@ def run_pipeline(
     output_dir: Path = typer.Option("outputs/pipeline_run", "--output-dir", "-o", help="Directory to save pipeline artifacts"),
     domain: str = typer.Option(..., "--domain", "-d", help="Knowledge domain"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
-    client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c", help="LLM client type"),
+    client: str = typer.Option(
+        "gemini",
+        "--client",
+        "-c",
+        help="LLM client type",
+        callback=_validate_client_type,
+    ),
     model: Optional[str] = typer.Option(None, "--model", help="Model ID"),
     api_key: Optional[str] = typer.Option(None, "--api-key", help="API key"),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL"),
@@ -248,7 +260,13 @@ def extract(
     output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory to save outputs"),
     domain: str = typer.Option(..., "--domain", "-d", help="Knowledge domain [required] (use 'list domains' to see all)"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
-    client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c", help="LLM client type"),
+    client: str = typer.Option(
+        "gemini",
+        "--client",
+        "-c",
+        help="LLM client type",
+        callback=_validate_client_type,
+    ),
     model: Optional[str] = typer.Option(None, "--model", help="Model ID"),
     api_key: Optional[str] = typer.Option(None, "--api-key", help="API key for Gemini"),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL for Ollama/LM Studio"),
@@ -329,7 +347,13 @@ def augment_connectivity(
     output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory with extracted JSON"),
     domain: str = typer.Option(..., "--domain", "-d", help="Knowledge domain (use 'list domains' to see all)"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
-    client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c", help="LLM client type"),
+    client: str = typer.Option(
+        "gemini",
+        "--client",
+        "-c",
+        help="LLM client type",
+        callback=_validate_client_type,
+    ),
     model: Optional[str] = typer.Option(None, "--model", help="Model ID"),
     api_key: Optional[str] = typer.Option(None, "--api-key", help="API key"),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL"),

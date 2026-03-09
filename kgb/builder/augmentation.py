@@ -256,10 +256,10 @@ def connectivity_strategy(
             
             prompt_text = _prepare_prompt(aug_prompt_template, record)
             
-            # Call LLM for bridge triples using generate_json (NOT extract)
+            # Call LLM for bridge triples using augment (NOT extract)
             # Augmentation generates NEW bridging triples that don't need source grounding
             # The extract() method uses langextract's grounding which fails for augmentation
-            new_triples_raw = client.generate_json(
+            new_triples_raw = client.augment(
                 text=prompt_text,
                 prompt_description=f"Generate bridging triples to connect disconnected components",
                 format_type=Triple,

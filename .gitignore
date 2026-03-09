@@ -10,3 +10,4 @@ __pycache__
 *.egg-info/
 .env
 *_log_*
+post*.md

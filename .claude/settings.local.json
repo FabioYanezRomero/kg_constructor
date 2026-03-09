@@ -19,7 +19,10 @@
       "Bash(docker rm:*)",
       "Bash(git stash:*)",
       "Bash(git push:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(kgb list:*)"
     ]
   }
 }

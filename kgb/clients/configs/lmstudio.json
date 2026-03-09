@@ -1,0 +1,7 @@
+{
+  "model_id": "local-model",
+  "base_url": "http://localhost:1234/v1",
+  "api_key": "lm-studio",
+  "max_workers": 5,
+  "batch_length": 5
+}

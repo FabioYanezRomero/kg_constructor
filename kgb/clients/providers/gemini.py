@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 import langextract as lx
 
 from ..base import BaseLLMClient, LLMClientError
+from ..defaults import load_provider_defaults
 
 if TYPE_CHECKING:
     from ..config import ClientConfig
@@ -33,9 +34,9 @@ class GeminiClient(BaseLLMClient):
 
     def __init__(
         self,
-        model_id: str = "gemini-2.0-flash",
+        model_id: str | None = None,
         api_key: str | None = None,
-        max_workers: int = 10,
+        max_workers: int | None = None,
         max_char_buffer: int = 8000,
         extraction_passes: int = 1,
         show_progress: bool = True,
@@ -44,17 +45,18 @@ class GeminiClient(BaseLLMClient):
         """Initialize Gemini client with langextract.
 
         Args:
-            model_id: Gemini model identifier (e.g., "gemini-2.0-flash")
+            model_id: Gemini model identifier (see configs/gemini.json for default)
             api_key: Google API key (or use LANGEXTRACT_API_KEY/GOOGLE_API_KEY env var)
-            max_workers: Maximum parallel workers for long documents
+            max_workers: Maximum parallel workers for long documents (see configs/gemini.json)
             max_char_buffer: Maximum characters per chunk for long documents
             extraction_passes: Number of extraction passes (higher = better recall)
             show_progress: Whether to show progress bar during extraction
             temperature: Default sampling temperature
         """
-        self.model_id = model_id
+        _defaults = load_provider_defaults("gemini")
+        self.model_id = model_id or _defaults["model_id"]
         self.api_key = api_key or os.getenv("LANGEXTRACT_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        self.max_workers = max_workers
+        self.max_workers = max_workers if max_workers is not None else _defaults["max_workers"]
         self.max_char_buffer = max_char_buffer
         self.extraction_passes = extraction_passes
         self.show_progress = show_progress
@@ -142,7 +144,7 @@ class GeminiClient(BaseLLMClient):
             traceback.print_exc()
             raise LLMClientError(f"Langextract extraction failed: {e}") from e
 
-    def generate_json(
+    def augment(
         self,
         text: str,
         prompt_description: str,
@@ -151,9 +153,9 @@ class GeminiClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any
     ) -> list[dict[str, Any]]:
-        """Generate structured JSON items directly using Gemini's native JSON mode.
+        """Generate augmentation triples using Gemini's native JSON mode.
 
-        This bypasses langextract to allow for unconstrained generation without
+        This bypasses langextract to allow for ungrounded inference without
         the overhead or restrictions of character-level source grounding.
 
         Args:
@@ -314,24 +316,13 @@ Input Text:
         except Exception as e:
             raise LLMClientError(f"Langextract extraction failed: {e}") from e
 
-    def get_model_name(self) -> str:
-        """Return the Gemini model identifier."""
-        return self.model_id
-
-    def supports_structured_output(self) -> bool:
-        """Gemini supports structured output via langextract schema constraints."""
-        return True
-
     @classmethod
     def from_config(cls, config: "ClientConfig") -> "GeminiClient":
-        """Create a GeminiClient from a ClientConfig.
-        
-        Applies Gemini-specific defaults for any unset values.
-        """
+        """Create a GeminiClient from a ClientConfig."""
         return cls(
-            model_id=config.model_id or "gemini-2.0-flash",
+            model_id=config.model_id,
             api_key=config.api_key,
-            max_workers=config.max_workers if config.max_workers is not None else 10,
+            max_workers=config.max_workers,
             max_char_buffer=config.max_char_buffer,
             extraction_passes=config.extraction_passes,
             show_progress=config.show_progress,

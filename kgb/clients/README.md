@@ -1,6 +1,6 @@
 # LLM Clients Module
 
-The `kgb/clients` module provides an abstraction layer over Large Language Model (LLM) backends. It provides a unified interface to execute knowledge graph extraction and general structural generation across different providers, such as Gemini, Ollama, and LM Studio.
+The `kgb/clients` module provides an abstraction layer over Large Language Model (LLM) backends. It provides a unified interface to execute knowledge graph extraction and graph augmentation across different providers, such as Gemini, Ollama, and LM Studio.
 
 ## Architecture
 
@@ -9,7 +9,7 @@ The module is built around three core components:
 1. **`BaseLLMClient`** (`base.py`)
    An abstract base class that defines the contract all client implementations must follow. Key methods include:
    - `extract()`: For extracting structured information grounded in the source text (provides character positions).
-   - `generate_json()`: For general-purpose structured JSON generation without source grounding.
+   - `augment()`: For augmentation-oriented structured generation without source grounding.
    - `from_config()`: A class method to instantiate the client from a unified configuration object.
 
 2. **`ClientConfig`** (`config.py`)
@@ -33,7 +33,7 @@ Currently, the framework supports:
 
 To add a new LLM provider to the framework:
 1. Create a new module in `kgb/clients/providers/` (e.g., `openai.py`).
-2. Implement a class inheriting from `BaseLLMClient`, ensuring you fulfill the required abstract methods (`extract`, `generate_json`, `supports_structured_output`, `get_model_name`, `from_config`).
+2. Implement a class inheriting from `BaseLLMClient`, ensuring you fulfill the required abstract methods (`extract`, `augment`, `from_config`).
 3. Register the new client in `kgb/clients/__init__.py`:
    ```python
    from .providers import NewProviderClient

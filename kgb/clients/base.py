@@ -44,7 +44,7 @@ class BaseLLMClient(ABC):
         pass
 
     @abstractmethod
-    def generate_json(
+    def augment(
         self,
         text: str,
         prompt_description: str,
@@ -53,39 +53,21 @@ class BaseLLMClient(ABC):
         max_tokens: int | None = None,
         **kwargs: Any
     ) -> list[dict[str, Any]]:
-        """Generate structured JSON items directly from text.
+        """Generate inferred triples for graph augmentation.
 
         Unlike extract(), this method should NOT attempt to ground extractions
-        in the source text (i.e., no char positions required). This is useful
-        for high-level inference and bridging.
+        in the source text (i.e., no char positions required). This is used
+        for high-level inference and bridging over an existing graph.
 
         Args:
             text: The input text
-            prompt_description: Instructions for generation
+            prompt_description: Instructions for augmentation
             format_type: Pydantic model for schema enforcement
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
 
         Returns:
             List of dictionaries matching the schema
-        """
-        pass
-
-    @abstractmethod
-    def get_model_name(self) -> str:
-        """Return the model identifier being used.
-
-        Returns:
-            Model name/identifier string
-        """
-        pass
-
-    @abstractmethod
-    def supports_structured_output(self) -> bool:
-        """Check if this client supports structured output via schema.
-
-        Returns:
-            True if structured output is supported, False otherwise
         """
         pass
 
