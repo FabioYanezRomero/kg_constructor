@@ -85,12 +85,12 @@ class KnowledgeDomain(ABC):
     Folder structure:
         domain_name/
             extraction/
-                prompt_open.txt
-                prompt_constrained.txt
+                prompt_open.md
+                prompt_constrained.md
                 examples.json
             augmentation/
                 connectivity/     # strategy folder
-                    prompt.txt
+                    prompt.md
                     examples.json
                 enrichment/       # future strategy
                     prompt.txt
@@ -116,7 +116,7 @@ class KnowledgeDomain(ABC):
             self._root_dir = Path(inspect.getfile(self.__class__)).parent
 
         # 2. Extraction Resource Paths (with overrides)
-        ext_mode_file = "prompt_open.txt" if self.extraction_mode == ExtractionMode.OPEN else "prompt_constrained.txt"
+        ext_mode_file = "prompt_open.md" if self.extraction_mode == ExtractionMode.OPEN else "prompt_constrained.md"
         
         self._ext_prompt_path = Path(extraction_prompt_path) if extraction_prompt_path else self._root_dir / "extraction" / ext_mode_file
         self._ext_examples_path = Path(extraction_examples_path) if extraction_examples_path else self._root_dir / "extraction" / "examples.json"
@@ -155,7 +155,7 @@ class KnowledgeDomain(ABC):
                 )
             
             self._augmentation_cache[strategy] = DomainComponent(
-                prompt_path=strategy_dir / "prompt.txt",
+                prompt_path=strategy_dir / "prompt.md",
                 examples_path=strategy_dir / "examples.json",
                 loader=self,
             )
