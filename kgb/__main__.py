@@ -24,7 +24,9 @@ os.environ["ABSL_LOGGING_LEVEL"] = "ERROR"
 import absl.logging
 absl.logging.set_verbosity(absl.logging.ERROR)
 
+import atexit
 import json
+import readline
 import shlex
 import sys
 from pathlib import Path
@@ -147,7 +149,7 @@ def list_clients():
 
 @app.command("run-pipeline")
 def run_pipeline(
-    input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file (.jsonl, .json, or .csv)", exists=True),
+    input_file: Path = typer.Option(..., "--input", "-i", "--input-file", help="Path to input file (.jsonl, .json, or .csv)", exists=True),
     output_dir: Path = typer.Option("outputs/pipeline_run", "--output-dir", "-o", help="Directory to save pipeline artifacts"),
     domain: str = typer.Option(..., "--domain", "-d", help="Knowledge domain"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
@@ -256,7 +258,7 @@ def run_pipeline(
 
 @app.command()
 def extract(
-    input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file (.jsonl, .json, or .csv)", exists=True),
+    input_file: Path = typer.Option(..., "--input", "-i", "--input-file", help="Path to input file (.jsonl, .json, or .csv)", exists=True),
     output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory to save outputs"),
     domain: str = typer.Option(..., "--domain", "-d", help="Knowledge domain [required] (use 'list domains' to see all)"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
@@ -343,7 +345,7 @@ def extract(
 
 @augment_app.command("connectivity")
 def augment_connectivity(
-    input_file: Path = typer.Option(..., "--input", "-i", help="Path to input file", exists=True),
+    input_file: Path = typer.Option(..., "--input", "-i", "--input-file", help="Path to input file", exists=True),
     output_dir: Path = typer.Option("outputs/kg_extraction", "--output-dir", "-o", help="Directory with extracted JSON"),
     domain: str = typer.Option(..., "--domain", "-d", help="Knowledge domain (use 'list domains' to see all)"),
     mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
@@ -501,7 +503,7 @@ def visualize_network(
 
 @visualize_app.command("extraction")
 def visualize_extraction(
-    input_file: Path = typer.Option(..., "--input", "-i", help="Path to original text data (.jsonl, .json, or .csv)", exists=True),
+    input_file: Path = typer.Option(..., "--input", "-i", "--input-file", help="Path to original text data (.jsonl, .json, or .csv)", exists=True),
     triples_dir: Path = typer.Option(..., "--triples", "-t", help="Directory with extracted JSON triples", exists=True),
     output_dir: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for HTML"),
     text_field: str = typer.Option("text", "--text-field", help="Field name containing text"),
@@ -574,8 +576,61 @@ KGB_BANNER = r"""
 """
 
 
+_HISTORY_FILE = Path.home() / ".kgb_history"
+_HISTORY_LENGTH = 1000
+
+# Top-level commands and subcommands for tab completion
+_COMPLETIONS = [
+    "extract", "augment", "connectivity", "convert",
+    "visualize", "network", "extraction",
+    "list", "domains", "clients", "run-pipeline",
+    "help", "exit", "quit",
+    "--input", "--input-file", "--output", "--output-dir",
+    "--domain", "--client", "--model", "--mode",
+    "--limit", "--temp", "--workers", "--timeout",
+    "--no-progress", "--api-key", "--base-url",
+    "--text-field", "--id-field", "--record-ids",
+    "--prompt", "--dark-mode", "--layout",
+    "--extract", "--augment", "--convert", "--visualize",
+    "--max-disconnected", "--max-iterations",
+    "--triples", "--speed", "--group-by",
+    "-i", "-o", "-d", "-c", "-m", "-l", "-t",
+]
+
+
+def _setup_readline():
+    """Configure readline for history, line editing, and tab completion."""
+    # Load persisted history
+    try:
+        readline.read_history_file(_HISTORY_FILE)
+    except FileNotFoundError:
+        pass
+    readline.set_history_length(_HISTORY_LENGTH)
+    atexit.register(readline.write_history_file, str(_HISTORY_FILE))
+
+    # Tab completion
+    def completer(text: str, state: int) -> str | None:
+        buf = readline.get_line_buffer().lstrip()
+        # If cursor is on the first token, complete command names only
+        if " " not in buf:
+            options = [c for c in _COMPLETIONS if c.startswith(text) and not c.startswith("-")]
+        else:
+            options = [c for c in _COMPLETIONS if c.startswith(text)]
+        return options[state] if state < len(options) else None
+
+    readline.set_completer(completer)
+    readline.set_completer_delims(" \t")
+    # macOS ships libedit instead of GNU readline; bind syntax differs
+    if "libedit" in (readline.__doc__ or ""):
+        readline.parse_and_bind("bind ^I rl_complete")
+    else:
+        readline.parse_and_bind("tab: complete")
+
+
 def interactive_shell():
     """Run the interactive KGB shell with REPL."""
+    _setup_readline()
+
     console.print(KGB_BANNER, style="bold green")
     console.print(f"  Knowledge Graph Builder v{__version__}", style="bold white")
     console.print("  Type [bold]help[/bold] for commands, [bold]exit[/bold] to quit.\n")
