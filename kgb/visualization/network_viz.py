@@ -1,7 +1,7 @@
 """Interactive network visualization using Plotly.
 
 Creates interactive HTML visualizations of knowledge graphs with
-node/edge hover information and degree-based coloring.
+node/edge hover information and origin-based coloring (extracted vs augmented).
 """
 
 from __future__ import annotations
@@ -78,7 +78,9 @@ def visualize_graph(
         "grid": "#334155" if dark_mode else "#e2e8f0",
         "edge": "#475569" if dark_mode else "#94a3b8",
         "node_line": "#1e293b" if dark_mode else "white",
-        "colorscale": "Turbo" # Premium multi-color scale
+        "color_extracted": "#2563eb",   # Blue — ground truth from extract()
+        "color_augmented": "#f59e0b",   # Amber — inferred via augmentation
+        "color_both": "#8b5cf6",        # Violet — present in both
     }
     
     # 4. Build Traces
@@ -121,58 +123,86 @@ def visualize_graph(
                 showlegend=False
             ))
     
-    node_x, node_y, node_text, node_hover, node_colors, node_sizes = [], [], [], [], [], []
+    # Classify each node by origin: extracted, augmented, or both
+    node_origin: dict[str, set[str]] = {node: set() for node in G.nodes()}
+    for u, v, edge_attrs in G.edges(data=True):
+        inference = edge_attrs.get("inference", "explicit")
+        origin = "augmented" if inference == "contextual" else "extracted"
+        node_origin[u].add(origin)
+        node_origin[v].add(origin)
+
+    origin_colors = {
+        "Extracted": theme["color_extracted"],
+        "Augmented": theme["color_augmented"],
+        "Both": theme["color_both"],
+    }
+
+    # Group nodes by origin category
+    origin_groups: dict[str, list] = {"Extracted": [], "Augmented": [], "Both": []}
     for node, attrs in G.nodes(data=True):
-        x, y = pos[node]
-        node_x.append(x)
-        node_y.append(y)
-        node_text.append(f"<b>{node}</b>")
-        
-        degree = G.degree(node)
-        hover = f"<b>{node}</b><br><br>"
-        if attrs:
-            for k, v in attrs.items():
-                hover += f"<b>{k}:</b> {v}<br>"
-        hover += f"<br><b>Degree:</b> {degree}"
-        
-        node_hover.append(hover)
-        node_colors.append(degree)
-        node_sizes.append(20 + degree * 2) # Size based on importance
-    
-    node_trace = go.Scatter(
-        x=node_x, y=node_y,
-        mode='markers+text',
-        text=node_text,
-        textposition="top center",
-        textfont=dict(size=11, color=theme["text"]),
-        hovertemplate='%{hovertext}<extra></extra>',
-        hovertext=node_hover,
-        marker=dict(
-            showscale=True,
-            colorscale=theme["colorscale"],
-            color=node_colors,
-            size=node_sizes,
-            colorbar=dict(
-                thickness=15, 
-                title=dict(text='Degree', font=dict(color=theme["text"])), 
-                xanchor='left',
-                tickfont=dict(color=theme["text"])
+        origins = node_origin[node]
+        if origins == {"extracted", "augmented"}:
+            category = "Both"
+        elif "augmented" in origins:
+            category = "Augmented"
+        else:
+            category = "Extracted"
+        origin_groups[category].append((node, attrs))
+
+    node_traces = []
+    for category, nodes in origin_groups.items():
+        if not nodes:
+            continue
+        nx_list, ny_list, texts, hovers, sizes = [], [], [], [], []
+        for node, attrs in nodes:
+            x, y = pos[node]
+            nx_list.append(x)
+            ny_list.append(y)
+            texts.append(f"<b>{node}</b>")
+
+            degree = G.degree(node)
+            hover = f"<b>{node}</b><br><br>"
+            if attrs:
+                for k, v in attrs.items():
+                    hover += f"<b>{k}:</b> {v}<br>"
+            hover += f"<b>Origin:</b> {category}<br>"
+            hover += f"<b>Degree:</b> {degree}"
+            hovers.append(hover)
+            sizes.append(20 + degree * 2)
+
+        node_traces.append(go.Scatter(
+            x=nx_list, y=ny_list,
+            mode='markers+text',
+            name=category,
+            text=texts,
+            textposition="top center",
+            textfont=dict(size=11, color=theme["text"]),
+            hovertemplate='%{hovertext}<extra></extra>',
+            hovertext=hovers,
+            marker=dict(
+                color=origin_colors[category],
+                size=sizes,
+                line=dict(width=1.5, color=theme["node_line"])
             ),
-            line=dict(width=1.5, color=theme["node_line"])
-        ),
-        showlegend=False
-    )
+            showlegend=True,
+            legendgroup=category,
+        ))
     
     # 5. Figure Assembly
-    fig = go.Figure(data=edge_traces + [node_trace])
-    
+    fig = go.Figure(data=edge_traces + node_traces)
+
     fig.update_layout(
         title=dict(
-            text=f'<b>{title}</b>', 
-            x=0.5, xanchor='center', 
+            text=f'<b>{title}</b>',
+            x=0.5, xanchor='center',
             font=dict(size=20, color=theme["text"])
         ),
-        showlegend=False,
+        showlegend=True,
+        legend=dict(
+            title=dict(text="Origin", font=dict(color=theme["text"])),
+            font=dict(color=theme["text"]),
+            bgcolor="rgba(0,0,0,0)",
+        ),
         hovermode='closest',
         margin=dict(b=40, l=40, r=40, t=80),
         paper_bgcolor=theme["bg"],

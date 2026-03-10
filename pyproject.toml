@@ -19,6 +19,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "google-generativeai>=0.3.0",
     "rich>=13.0.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -32,3 +33,4 @@ include = ["kgb*"]
 
 [tool.setuptools.package-data]
 "kgb.clients" = ["configs/*.json"]
+"kgb.pipeline" = ["configs/*.yaml"]

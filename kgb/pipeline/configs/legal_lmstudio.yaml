@@ -1,0 +1,32 @@
+name: legal-lmstudio
+description: Full pipeline for legal domain using LM Studio (local)
+
+client:
+  type: lmstudio
+  model: google/gemma-3-27b
+  temperature: 0.0
+  timeout: 300
+  base_url: http://localhost:1234/v1
+  workers: 3
+
+domain: legal
+mode: open
+
+input:
+  file: data/legal/legal_background.jsonl
+  text_field: text
+  id_field: id
+
+output_dir: outputs/pipeline_run_lmstudio
+
+steps:
+  - extract
+  - augment:
+      max_disconnected: 1
+      max_iterations: 3
+  - export-json
+  - convert
+  - visualize-network:
+      layout: spring
+  - visualize-extraction:
+      group_by: entity_type

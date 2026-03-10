@@ -1,0 +1,31 @@
+name: legal-gemini
+description: Full pipeline for legal domain using Gemini API
+
+client:
+  type: gemini
+  model: gemini-2.0-flash
+  temperature: 0.0
+  timeout: 120
+
+domain: legal
+mode: open
+
+input:
+  file: data/legal/legal_background.jsonl
+  text_field: text
+  id_field: id
+
+output_dir: outputs/pipeline_run
+
+steps:
+  - extract
+  - augment:
+      max_disconnected: 1
+      max_iterations: 5
+  - export-json
+  - convert
+  - visualize-network:
+      dark_mode: false
+      layout: spring
+  - visualize-extraction:
+      group_by: entity_type

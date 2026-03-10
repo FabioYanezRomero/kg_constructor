@@ -45,7 +45,10 @@ from .io.readers import load_records
 from .io.writers import convert_json_directory
 from .visualization import batch_visualize_graphs, EntityVisualizer
 from .domains import list_available_domains, ExtractionMode
-from .pipeline import PipelineRunner, PipelineContext, get_step
+from .pipeline import (
+    PipelineRunner, PipelineContext, get_step,
+    load_pipeline_config, build_pipeline_from_config, list_pipeline_configs,
+)
 
 __version__ = "0.1.0"
 
@@ -143,31 +146,42 @@ def list_clients():
     console.print(table)
 
 
+@list_app.command("pipelines")
+def list_pipelines():
+    """List built-in YAML pipeline configurations."""
+    configs = list_pipeline_configs()
+    if not configs:
+        console.print("[yellow]No built-in pipeline configs found.[/yellow]")
+        return
+    table = Table(title="Built-in Pipeline Configs")
+    table.add_column("File", style="cyan")
+    table.add_column("Description", style="white")
+    for filename, description in configs:
+        table.add_row(filename, description)
+    console.print(table)
+    console.print("\n[dim]Usage: kgb run-pipeline --config kgb/pipeline/configs/<file>[/dim]")
+
+
 # =============================================================================
 # PIPELINE Command
 # =============================================================================
 
 @app.command("run-pipeline")
 def run_pipeline(
-    input_file: Path = typer.Option(..., "--input", "-i", "--input-file", help="Path to input file (.jsonl, .json, or .csv)", exists=True),
-    output_dir: Path = typer.Option("outputs/pipeline_run", "--output-dir", "-o", help="Directory to save pipeline artifacts"),
-    domain: str = typer.Option(..., "--domain", "-d", help="Knowledge domain"),
-    mode: ExtractionMode = typer.Option(ExtractionMode.OPEN, "--mode", "-m", help="Extraction mode"),
-    client: str = typer.Option(
-        "gemini",
-        "--client",
-        "-c",
-        help="LLM client type",
-        callback=_validate_client_type,
-    ),
+    config_file: Optional[Path] = typer.Option(None, "--config", "-f", help="Path to a YAML pipeline config file", exists=True),
+    input_file: Optional[Path] = typer.Option(None, "--input", "-i", "--input-file", help="Path to input file (.jsonl, .json, or .csv)", exists=True),
+    output_dir: Optional[Path] = typer.Option(None, "--output-dir", "-o", help="Directory to save pipeline artifacts"),
+    domain: Optional[str] = typer.Option(None, "--domain", "-d", help="Knowledge domain"),
+    mode: Optional[ExtractionMode] = typer.Option(None, "--mode", "-m", help="Extraction mode"),
+    client: Optional[str] = typer.Option(None, "--client", "-c", help="LLM client type"),
     model: Optional[str] = typer.Option(None, "--model", help="Model ID"),
     api_key: Optional[str] = typer.Option(None, "--api-key", help="API key"),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL"),
-    text_field: str = typer.Option("text", "--text-field", help="Field name containing text"),
-    id_field: str = typer.Option("id", "--id-field", help="Field name containing record IDs"),
+    text_field: Optional[str] = typer.Option(None, "--text-field", help="Field name containing text"),
+    id_field: Optional[str] = typer.Option(None, "--id-field", help="Field name containing record IDs"),
     limit: Optional[int] = typer.Option(None, "--limit", "-l", help="Limit number of records"),
-    temperature: float = typer.Option(0.0, "--temp", help="Sampling temperature"),
-    # Logical Pipeline Steps Toggles
+    temperature: Optional[float] = typer.Option(None, "--temp", help="Sampling temperature"),
+    # Logical Pipeline Steps Toggles (flag-based mode only)
     do_extract: bool = typer.Option(False, "--extract", help="Run extraction step"),
     do_augment: bool = typer.Option(False, "--augment", help="Run connectivity augmentation step"),
     do_convert: bool = typer.Option(False, "--convert", help="Convert resulting triples to GraphML"),
@@ -175,77 +189,162 @@ def run_pipeline(
     # General arguments
     no_progress: bool = typer.Option(False, "--no-progress", help="Hide progress bar"),
     max_workers: Optional[int] = typer.Option(None, "--workers", help="Max parallel workers"),
-    timeout: int = typer.Option(120, "--timeout", help="Request timeout (seconds)"),
+    timeout: Optional[int] = typer.Option(None, "--timeout", help="Request timeout (seconds)"),
 ):
-    """Run a dynamically composed pipeline based on provided logical flags.
-    
+    """Run a dynamically composed pipeline from a YAML config or logical flags.
+
     \b
     Examples:
+        kgb run-pipeline --config pipeline.yaml
+        kgb run-pipeline --config pipeline.yaml --input other.jsonl
         kgb run-pipeline --input data.jsonl --domain legal --extract --client ollama
         kgb run-pipeline --input data.jsonl --domain legal --extract --augment --convert --visualize --client ollama
     """
-    if not any([do_extract, do_augment, do_convert, do_visualize]):
-        console.print("[yellow]Warning: No pipeline steps selected. Use --extract, --augment, --convert, or --visualize.[/yellow]")
+    # ----- YAML config-driven mode -------------------------------------------
+    if config_file is not None:
+        console.print(f"[bold blue]Pipeline Orchestrator Launching (config: {config_file.name})[/bold blue]")
+        try:
+            raw_config = load_pipeline_config(config_file)
+
+            # Build overrides dict from any CLI flags that were explicitly set.
+            cli_overrides: dict[str, Any] = {}
+            if input_file is not None:
+                cli_overrides["input_file"] = input_file
+            if output_dir is not None:
+                cli_overrides["output_dir"] = output_dir
+            if domain is not None:
+                cli_overrides["domain"] = domain
+            if mode is not None:
+                cli_overrides["mode"] = mode
+            if client is not None:
+                cli_overrides["client"] = client
+            if model is not None:
+                cli_overrides["model"] = model
+            if api_key is not None:
+                cli_overrides["api_key"] = api_key
+            if base_url is not None:
+                cli_overrides["base_url"] = base_url
+            if temperature is not None:
+                cli_overrides["temperature"] = temperature
+            if timeout is not None:
+                cli_overrides["timeout"] = timeout
+            if max_workers is not None:
+                cli_overrides["workers"] = max_workers
+            if text_field is not None:
+                cli_overrides["text_field"] = text_field
+            if id_field is not None:
+                cli_overrides["id_field"] = id_field
+            if limit is not None:
+                cli_overrides["limit"] = limit
+            if no_progress:
+                cli_overrides["no_progress"] = True
+
+            runner, contexts = build_pipeline_from_config(raw_config, cli_overrides)
+
+            config_name = raw_config.get("name", config_file.stem)
+            resolved_output = cli_overrides.get("output_dir", raw_config.get("output_dir", "outputs/pipeline_run"))
+            console.print(f"Pipeline [green]{config_name}[/green] | {len(contexts)} records | {len(runner.steps)} steps")
+
+            results = runner.execute_batch(contexts, max_workers=max_workers, show_progress=not no_progress)
+
+            successes = sum(1 for c in results if not c.errors)
+            errors = sum(1 for c in results if c.errors)
+
+            console.print(f"\n[bold green]Pipeline execution complete.[/bold green]")
+            console.print(f"Success: {successes} | Errors: {errors}")
+            console.print(f"Artifacts located at: {resolved_output}")
+
+            if errors > 0:
+                console.print("\n[bold red]Errors detail:[/bold red]")
+                for c in results:
+                    if c.errors:
+                        console.print(f"  [{c.record_id}]: {c.errors[0]}")
+
+        except Exception as e:
+            console.print(f"[bold red]Pipeline Error:[/bold red] {e}")
+            raise typer.Exit(code=1)
         return
-        
+
+    # ----- Flag-based mode (original behaviour) ------------------------------
+    if not any([do_extract, do_augment, do_convert, do_visualize]):
+        console.print("[yellow]Warning: No pipeline steps selected. Use --config <file> or --extract, --augment, --convert, --visualize.[/yellow]")
+        return
+
+    # Require mandatory flags in flag-based mode.
+    if input_file is None:
+        console.print("[red]Error: --input is required in flag-based mode.[/red]")
+        raise typer.Exit(code=1)
+    if domain is None:
+        console.print("[red]Error: --domain is required in flag-based mode.[/red]")
+        raise typer.Exit(code=1)
+
+    # Apply defaults for optional flags.
+    _output_dir = Path(output_dir) if output_dir is not None else Path("outputs/pipeline_run")
+    _client = client or "gemini"
+    _validate_client_type(_client)
+    _temperature = temperature if temperature is not None else 0.0
+    _timeout = timeout if timeout is not None else 120
+    _text_field = text_field or "text"
+    _id_field = id_field or "id"
+
     console.print(f"[bold blue]Pipeline Orchestrator Launching[/bold blue]")
-    
+
     try:
         # Load records and initialize contexts
-        records = load_records(input_file, text_field, id_field, None, limit)
+        records = load_records(input_file, _text_field, _id_field, None, limit)
         contexts = [PipelineContext(record_id=str(r["id"]), text=str(r["text"])) for r in records]
         console.print(f"Loaded {len(contexts)} contexts from {input_file.name}")
-        
+
         # Setup cross-cutting utilities
-        from .domains import get_domain
-        domain_obj = get_domain(domain, extraction_mode=mode)
-        config = _build_client_config(client, model, api_key, base_url, temperature, no_progress, max_workers, timeout)
+        from .domains import get_domain as _get_domain
+        _mode = mode if mode is not None else ExtractionMode.OPEN
+        domain_obj = _get_domain(domain, extraction_mode=_mode)
+        config = _build_client_config(_client, model, api_key, base_url, _temperature, no_progress, max_workers, _timeout)
         llm_client = ClientFactory.create(config)
-        output_dir = Path(output_dir)
-        
+
         # Assemble Pipeline Steps Sequence
         steps_sequence = []
-        
+
         if do_extract:
-            steps_sequence.append(get_step("extract")(client=llm_client, domain=domain_obj, temperature=temperature))
-            
+            steps_sequence.append(get_step("extract")(client=llm_client, domain=domain_obj, temperature=_temperature))
+
         if do_augment:
-            steps_sequence.append(get_step("augment")(client=llm_client, domain=domain_obj, temperature=temperature))
-            
+            steps_sequence.append(get_step("augment")(client=llm_client, domain=domain_obj, temperature=_temperature))
+
         if do_extract or do_augment:
-            json_dir = output_dir / "extracted_json"
+            json_dir = _output_dir / "extracted_json"
             steps_sequence.append(get_step("export-json")(output_dir=json_dir))
-            
+
         if do_convert:
-            graphml_dir = output_dir / "graphml"
+            graphml_dir = _output_dir / "graphml"
             steps_sequence.append(get_step("convert")(output_dir=graphml_dir))
-            
+
         if do_visualize:
-            network_dir = output_dir / "visualizations"
-            extraction_viz_dir = output_dir / "visualizations_extraction"
+            network_dir = _output_dir / "visualizations"
+            extraction_viz_dir = _output_dir / "visualizations_extraction"
             steps_sequence.append(get_step("visualize-network")(output_dir=network_dir))
             steps_sequence.append(get_step("visualize-extraction")(output_dir=extraction_viz_dir))
-            
+
         # Execute Pipeline Sequence
         console.print(f"[bold green]Assembled {len(steps_sequence)} pipeline steps.[/bold green]")
         runner = PipelineRunner(steps=steps_sequence)
-        
+
         results = runner.execute_batch(contexts, max_workers=max_workers, show_progress=not no_progress)
-        
+
         # Determine Success Criteria
         successes = sum(1 for c in results if not c.errors)
         errors = sum(1 for c in results if c.errors)
-        
-        console.print(f"\n[bold green]✓ Pipeline execution complete.[/bold green]")
+
+        console.print(f"\n[bold green]Pipeline execution complete.[/bold green]")
         console.print(f"Success: {successes} | Errors: {errors}")
-        console.print(f"Artifacts located at: {output_dir}")
-        
+        console.print(f"Artifacts located at: {_output_dir}")
+
         if errors > 0:
             console.print("\n[bold red]Errors detail:[/bold red]")
             for c in results:
                 if c.errors:
                     console.print(f"  [{c.record_id}]: {c.errors[0]}")
-                    
+
     except Exception as e:
         console.print(f"[bold red]Pipeline Error:[/bold red] {e}")
         raise typer.Exit(code=1)
@@ -583,7 +682,7 @@ _HISTORY_LENGTH = 1000
 _COMPLETIONS = [
     "extract", "augment", "connectivity", "convert",
     "visualize", "network", "extraction",
-    "list", "domains", "clients", "run-pipeline",
+    "list", "domains", "clients", "pipelines", "run-pipeline",
     "help", "exit", "quit",
     "--input", "--input-file", "--output", "--output-dir",
     "--domain", "--client", "--model", "--mode",
@@ -592,6 +691,7 @@ _COMPLETIONS = [
     "--text-field", "--id-field", "--record-ids",
     "--prompt", "--dark-mode", "--layout",
     "--extract", "--augment", "--convert", "--visualize",
+    "--config", "-f",
     "--max-disconnected", "--max-iterations",
     "--triples", "--speed", "--group-by",
     "-i", "-o", "-d", "-c", "-m", "-l", "-t",

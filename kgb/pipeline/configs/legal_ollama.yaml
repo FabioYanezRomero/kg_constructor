@@ -1,0 +1,32 @@
+name: legal-ollama
+description: Full pipeline for legal domain using Ollama (local)
+
+client:
+  type: ollama
+  model: gemma3:1b
+  temperature: 0.0
+  timeout: 300
+  base_url: http://localhost:11434
+  workers: 3
+
+domain: legal
+mode: open
+
+input:
+  file: data/legal/legal_background.jsonl
+  text_field: text
+  id_field: id
+
+output_dir: outputs/pipeline_run_ollama
+
+steps:
+  - extract
+  - augment:
+      max_disconnected: 1
+      max_iterations: 3
+  - export-json
+  - convert
+  - visualize-network:
+      layout: spring
+  - visualize-extraction:
+      group_by: entity_type
