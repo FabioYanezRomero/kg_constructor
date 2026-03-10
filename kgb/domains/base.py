@@ -123,7 +123,7 @@ class KnowledgeDomain(ABC):
         
         self._schema_path = Path(schema_path) if schema_path else self._root_dir / "schema.json"
 
-        # 3. Extraction Component (fixed)
+        # 3. Extraction Component
         self.extraction = DomainComponent(self._ext_prompt_path, self._ext_examples_path, self)
 
         # 4. Augmentation Strategy Cache

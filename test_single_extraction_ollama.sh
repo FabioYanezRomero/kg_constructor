@@ -16,9 +16,16 @@ TEMPERATURE=0.0
 # Base directory detection (Docker vs local)
 if [ -d "/app/kgb" ]; then
     BASE_DIR="/app"
+    PYTHON="python3"
     OLLAMA_BASE_URL="http://host.docker.internal:11434"  # Docker networking
 else
     BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+    # Use venv Python if available (system Python may lack dependencies)
+    if [ -x "${BASE_DIR}/.venv/bin/python3" ]; then
+        PYTHON="${BASE_DIR}/.venv/bin/python3"
+    else
+        PYTHON="python3"
+    fi
     OLLAMA_BASE_URL="http://localhost:11434"  # Local networking
 fi
 
@@ -79,7 +86,7 @@ echo "==========================================================================
 # Check if Ollama is reachable
 echo ""
 echo "Checking Ollama connection..."
-python3 -c "
+$PYTHON -c "
 import requests
 import sys
 try:
@@ -138,7 +145,7 @@ echo "==========================================================================
 echo "STEP 1: EXTRACTING TRIPLES"
 echo "================================================================================"
 
-if ! python3 -m kgb extract $CLI_OPTS; then
+if ! $PYTHON -m kgb extract $CLI_OPTS; then
     echo "ERROR: Extraction failed"
     exit 1
 fi
@@ -151,7 +158,7 @@ echo "==========================================================================
 echo "STEP 2: AUGMENTING CONNECTIVITY"
 echo "================================================================================"
 
-if ! python3 -m kgb augment connectivity $CLI_OPTS \
+if ! $PYTHON -m kgb augment connectivity $CLI_OPTS \
     --max-disconnected $MAX_DISCONNECTED \
     --max-iterations $MAX_ITERATIONS; then
     echo "ERROR: Augmentation failed"
@@ -169,7 +176,7 @@ echo "==========================================================================
 JSON_DIR="$OUTPUT_DIR/extracted_json"
 GRAPHML_DIR="$OUTPUT_DIR/graphml"
 
-if ! python3 -m kgb convert --input "$JSON_DIR" --output "$GRAPHML_DIR"; then
+if ! $PYTHON -m kgb convert --input "$JSON_DIR" --output "$GRAPHML_DIR"; then
     echo "ERROR: Conversion failed"
     exit 1
 fi
@@ -191,7 +198,7 @@ if [ "$CREATE_NETWORK_VIZ" = true ]; then
         VIZ_OPTS="$VIZ_OPTS --dark-mode"
     fi
 
-    if ! python3 -m kgb visualize network $VIZ_OPTS; then
+    if ! $PYTHON -m kgb visualize network $VIZ_OPTS; then
         echo "WARNING: Network visualization failed"
     fi
 fi
@@ -205,7 +212,7 @@ if [ "$CREATE_EXTRACTION_VIZ" = true ]; then
 
     EXTRACTION_VIZ_DIR="$OUTPUT_DIR/extraction_viz"
     
-    if ! python3 -m kgb visualize extraction \
+    if ! $PYTHON -m kgb visualize extraction \
         --input "$INPUT_FILE" \
         --triples "$JSON_DIR" \
         --output "$EXTRACTION_VIZ_DIR" \
