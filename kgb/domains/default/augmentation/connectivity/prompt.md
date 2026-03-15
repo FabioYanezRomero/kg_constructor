@@ -9,6 +9,8 @@ Your goal is to connect these components by finding missing relationships.
 2. Label all bridging triples as "inference": "contextual".
 3. Provide a "justification" explaining how this connection bridges the gap.
 
+{{schema_constraints}}
+
 Input Data:
 The following JSON contains:
 - "text": The original source text to analyze

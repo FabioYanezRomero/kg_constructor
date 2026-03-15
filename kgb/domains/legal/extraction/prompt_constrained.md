@@ -23,5 +23,7 @@ Relation Types:
 - Causal: caused, resulted_in, led_to
 - Participation: involved_in, party_to, signed_by
 
+{{schema_constraints}}
+
 Input to analyze:
 {{record_json}}

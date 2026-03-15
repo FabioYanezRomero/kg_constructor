@@ -8,17 +8,20 @@ This module provides:
 
 from __future__ import annotations
 
-from typing import Any, Protocol, Callable, TYPE_CHECKING
+from typing import Any, Protocol, Callable
 
 import networkx as nx
 
 from ..clients import BaseLLMClient
 from ..domains import KnowledgeDomain, Triple, InferenceType
-from .extraction import extract_triples, _render_prompt_template
-
-if TYPE_CHECKING:
-    import langextract as lx
-
+from .extraction import (
+    _build_schema_guidance,
+    _collect_schema_constraints,
+    _render_prompt_template,
+    _validate_triples_against_schema,
+    _warn_on_schema_validation,
+    extract_triples,
+)
 
 # =============================================================================
 # Strategy Protocol & Registry
@@ -87,61 +90,6 @@ def _build_graph_from_triples(triples: list[Triple]) -> nx.DiGraph:
         if t.head and t.tail:
             G.add_edge(t.head, t.tail, relation=t.relation)
     return G
-
-
-def _build_examples(raw_ex: dict[str, Any]) -> Any:
-    """Build one example in the client-ready format for augmentation.
-    
-    Handles both extraction (text/extractions) and augmentation (input/output) formats.
-    Properly converts extractions to lx.data.Extraction objects.
-    """
-    import langextract as lx
-    
-    def _dict_to_extraction(ext_dict: dict[str, Any]) -> lx.data.Extraction:
-        """Convert a dict to an Extraction object."""
-        return lx.data.Extraction(
-            extraction_class=ext_dict.get("extraction_class", "Triple"),
-            extraction_text=ext_dict.get("extraction_text", ""),
-            attributes=ext_dict.get("attributes", {})
-        )
-    
-    # 1. Standard Extraction Example (text/extractions format)
-    if "text" in raw_ex and "extractions" in raw_ex:
-        extractions = [_dict_to_extraction(e) for e in raw_ex["extractions"]]
-        return lx.data.ExampleData(text=raw_ex["text"], extractions=extractions)
-    
-    # 2. Augmentation Example (input/output format)
-    if "input" in raw_ex and "output" in raw_ex:
-        input_data = raw_ex["input"]
-        
-        if isinstance(input_data, dict):
-            text_part = f"Text: {input_data.get('text', '')}"
-            comp_part = ""
-            if "components" in input_data:
-                comps = input_data["components"]
-                comp_list = []
-                for i, c in enumerate(comps, 1):
-                    entities = c.get("entities", []) if isinstance(c, dict) else c
-                    comp_list.append(f"Component {i}: [{', '.join(entities)}]")
-                comp_part = "\nDisconnected Components:\n" + "\n".join(comp_list)
-            example_text = text_part + comp_part
-        else:
-            example_text = str(input_data)
-
-        # Convert output triples to Extraction objects
-        extractions = []
-        for t in raw_ex["output"]:
-            extraction = lx.data.Extraction(
-                extraction_class="Triple",
-                extraction_text="",  # Augmentation examples may not have extraction_text
-                attributes=t if isinstance(t, dict) else {"value": str(t)}
-            )
-            extractions.append(extraction)
-        
-        return lx.data.ExampleData(text=example_text, extractions=extractions)
-    
-    # Fallback/Unknown format
-    return lx.data.ExampleData(text=str(raw_ex), extractions=[])
 
 
 # =============================================================================
@@ -230,7 +178,7 @@ def connectivity_strategy(
     """
     augmentation_component = domain.get_augmentation("connectivity")
     aug_prompt_template = augmentation_prompt_override or augmentation_component.prompt
-    aug_examples = [_build_examples(ex) for ex in augmentation_component.examples]
+    constraints = _collect_schema_constraints(domain, augmentation_component.examples)
     
     all_triples = list(triples)  # Copy to avoid mutating input
     iterations_data = []
@@ -254,13 +202,17 @@ def connectivity_strategy(
                 "disconnected_components": comp_text
             }
             
-            prompt_text = _render_prompt_template(aug_prompt_template, record)
+            final_prompt = _render_prompt_template(
+                aug_prompt_template,
+                record,
+                schema_guidance=_build_schema_guidance(constraints),
+            )
             
             # Call LLM for bridge triples using augment (NOT extract)
             # Augmentation generates NEW bridging triples that don't need source grounding
             # The extract() method uses langextract's grounding which fails for augmentation
             new_triples_raw = client.augment(
-                text=prompt_text,
+                text=final_prompt,
                 prompt_description=f"Generate bridging triples to connect disconnected components",
                 format_type=Triple,
                 temperature=temperature,
@@ -268,20 +220,30 @@ def connectivity_strategy(
             )
             
             new_triples = []
+            normalized_new_triples_raw: list[dict[str, Any]] = []
             for t_raw in new_triples_raw:
                 try:
                     t_dict = t_raw if isinstance(t_raw, dict) else t_raw.model_dump()
                     t_dict["inference"] = InferenceType.CONTEXTUAL
                     new_triples.append(Triple(**t_dict))
+                    normalized_new_triples_raw.append(t_dict)
                 except Exception as e:
                     print(f"Warning: Skipping invalid augmented triple: {e}")
-            
-            all_triples.extend(new_triples)
+
+            validated_new_triples, validation_summary = _validate_triples_against_schema(
+                new_triples,
+                constraints,
+                raw_triples=normalized_new_triples_raw,
+            )
+            _warn_on_schema_validation("augmentation", validation_summary)
+
+            all_triples.extend(validated_new_triples)
             iterations_data.append({
                 "iteration": i + 1,
                 "components_before": len(components),
-                "new_triples_count": len(new_triples),
-                "status": "success"
+                "new_triples_count": len(validated_new_triples),
+                "status": "success",
+                "schema_validation": validation_summary,
             })
             
         except Exception as e:
@@ -301,7 +263,10 @@ def connectivity_strategy(
         "strategy": "connectivity",
         "iterations": iterations_data, 
         "final_components": len(final_components),
-        "partial_result": error_occurred
+        "partial_result": error_occurred,
+        "schema_constraints_applied": constraints.enforce,
+        "allowed_entity_types": list(constraints.entity_types),
+        "allowed_relation_types": list(constraints.relation_types),
     }
 
     return all_triples, metadata
@@ -352,18 +317,31 @@ def augment_triples(
     Raises:
         ValueError: If the strategy is not registered
     """
+    initial_schema_validation: dict[str, Any] | None = None
+
     # 1. Initial Extraction (if needed)
     if initial_triples:
         validated_triples = []
+        raw_validated_triples: list[dict[str, Any]] = []
         for t in initial_triples:
             if isinstance(t, Triple):
                 validated_triples.append(t)
+                raw_validated_triples.append(t.model_dump())
             else:
                 try:
-                    validated_triples.append(Triple(**t))
+                    triple = Triple(**t)
+                    validated_triples.append(triple)
+                    raw_validated_triples.append(t)
                 except Exception as e:
                     print(f"Warning: Skipping invalid initial triple: {e}")
-        triples = validated_triples
+        extraction_constraints = _collect_schema_constraints(domain, domain.extraction.examples)
+        triples, validation_summary = _validate_triples_against_schema(
+            validated_triples,
+            extraction_constraints,
+            raw_triples=raw_validated_triples,
+        )
+        initial_schema_validation = validation_summary
+        _warn_on_schema_validation("augmentation bootstrap", validation_summary)
     else:
         triples = extract_triples(
             client, domain, text, record_id, temperature, max_tokens, prompt_override
@@ -378,7 +356,7 @@ def augment_triples(
             f"Available: [{available}]"
         )
 
-    return strategy_fn(
+    triples, metadata = strategy_fn(
         client=client,
         domain=domain,
         text=text,
@@ -389,6 +367,9 @@ def augment_triples(
         max_tokens=max_tokens,
         augmentation_prompt_override=augmentation_prompt_override
     )
+    if initial_schema_validation is not None:
+        metadata["initial_schema_validation"] = initial_schema_validation
+    return triples, metadata
 
 
 def extract_connected_graph(

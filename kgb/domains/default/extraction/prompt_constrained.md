@@ -9,5 +9,7 @@ events, and entities described in the input text.
 - Prefer splitting complex phrases into smaller meaningful entities.
 - Every explicit triple must be labeled with "inference": "explicit".
 
+{{schema_constraints}}
+
 Input to analyze:
 {{record_json}}

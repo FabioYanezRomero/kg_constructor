@@ -43,6 +43,8 @@ Remember:
 - Connectivity is the priority. Bridging the gap between isolated nodes is your main task.
 - Be aggressive with Hub Nodes if it helps unify the knowledge graph.
 
+{{schema_constraints}}
+
 Input Data:
 The following JSON contains:
 - "text": The original source text to analyze
