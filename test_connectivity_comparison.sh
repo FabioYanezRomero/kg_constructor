@@ -92,7 +92,7 @@ def main():
     print("Extracting all triples in a single API call...\n")
 
     # One-step extraction
-    one_step_triples = extractor.extract_from_text(
+    one_step_triples = extractor.extract_triples(
         text=text,
         record_id=record_id,
         temperature=temperature
@@ -146,7 +146,7 @@ def main():
     print("Step 2: Iterative connectivity improvement\n")
 
     # Two-step extraction
-    two_step_triples, two_step_metadata = extractor.extract_connected_graph(
+    two_step_triples, two_step_metadata = extractor.augment_triples(
         text=text,
         record_id=record_id,
         temperature=temperature,

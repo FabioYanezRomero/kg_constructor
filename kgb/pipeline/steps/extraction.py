@@ -6,7 +6,7 @@ import json
 from typing import Any
 from pathlib import Path
 
-from ...builder import extract_from_text
+from ...builder import extract_triples
 from ...clients import BaseLLMClient
 from ...domains import KnowledgeDomain
 
@@ -49,7 +49,7 @@ class ExtractionStep:
             PipelineContext updated with extracted triples.
         """
         try:
-            triples = extract_from_text(
+            triples = extract_triples(
                 client=self.client,
                 domain=self.domain,
                 text=context.text,

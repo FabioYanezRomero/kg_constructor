@@ -13,7 +13,7 @@ from pathlib import Path
 # Import the new modular API
 from kgb.clients import ClientConfig, ClientFactory
 from kgb.domains import get_domain, ExtractionMode
-from kgb.builder import extract_from_text, extract_connected_graph
+from kgb.builder import extract_triples, augment_triples
 from kgb.io.readers import load_records
 
 
@@ -98,7 +98,7 @@ def main():
         # ------------------------------------------------------------------
         
         # Option A: Simple extraction (Step 1 only)
-        # triples = extract_from_text(
+        # triples = extract_triples(
         #     client=client,
         #     domain=domain,
         #     text=text,
@@ -108,7 +108,7 @@ def main():
         # metadata = {}
         
         # Option B: Connected graph extraction (Step 1 + Augmentation)
-        triples, metadata = extract_connected_graph(
+        triples, metadata = augment_triples(
             client=client,
             domain=domain,
             text=text,

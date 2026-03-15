@@ -11,8 +11,8 @@ from ..clients import BaseLLMClient
 from ..domains import KnowledgeDomain, Triple
 
 
-def _prepare_prompt(prompt_template: str, record: dict[str, Any]) -> str:
-    """Prepare the extraction prompt from template."""
+def _render_prompt_template(prompt_template: str, record: dict[str, Any]) -> str:
+    """Render a prompt template with the current record payload."""
     prompt = prompt_template.replace(
         "{{record_json}}",
         json.dumps(record, ensure_ascii=False, indent=2)
@@ -20,8 +20,8 @@ def _prepare_prompt(prompt_template: str, record: dict[str, Any]) -> str:
     return prompt
 
 
-def _create_examples(domain: KnowledgeDomain) -> list[lx.data.ExampleData]:
-    """Create few-shot examples for langextract extraction.
+def _build_examples(domain: KnowledgeDomain) -> list[lx.data.ExampleData]:
+    """Build extraction examples from the domain configuration.
     
     Converts raw example dicts to proper langextract ExampleData objects
     with Extraction objects (not plain dicts).
@@ -85,7 +85,7 @@ def _normalize_triple(raw_triple: dict[str, Any]) -> Triple | None:
         return None
 
 
-def extract_from_text(
+def extract_triples(
     client: BaseLLMClient,
     domain: KnowledgeDomain,
     text: str,
@@ -113,8 +113,8 @@ def extract_from_text(
         record["id"] = record_id
 
     prompt_template = prompt_override or domain.extraction.prompt
-    prompt_text = _prepare_prompt(prompt_template, record)
-    examples = _create_examples(domain)
+    prompt_text = _render_prompt_template(prompt_template, record)
+    examples = _build_examples(domain)
 
     # Use langextract for extraction (required for visualizations)
     raw_triples = client.extract(
@@ -134,3 +134,23 @@ def extract_from_text(
     
     return triples
 
+
+def extract_from_text(
+    client: BaseLLMClient,
+    domain: KnowledgeDomain,
+    text: str,
+    record_id: str | None = None,
+    temperature: float = 0.0,
+    max_tokens: int | None = None,
+    prompt_override: str | None = None
+) -> list[Triple]:
+    """Backward-compatible alias for ``extract_triples``."""
+    return extract_triples(
+        client=client,
+        domain=domain,
+        text=text,
+        record_id=record_id,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        prompt_override=prompt_override,
+    )

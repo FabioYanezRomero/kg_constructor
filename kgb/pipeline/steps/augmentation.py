@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...builder import extract_connected_graph
+from ...builder import augment_triples
 from ...clients import BaseLLMClient
 from ...domains import KnowledgeDomain
 
@@ -60,7 +60,7 @@ class AugmentationStep:
             return context
 
         try:
-            triples, metadata = extract_connected_graph(
+            triples, metadata = augment_triples(
                 client=self.client,
                 domain=self.domain,
                 text=context.text,

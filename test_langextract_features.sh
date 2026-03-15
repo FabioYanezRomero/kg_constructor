@@ -55,7 +55,7 @@ print()
 
 # Extract
 extractor = KnowledgeGraphExtractor()
-triples = extractor.extract_from_text(text, record_id="test_001")
+triples = extractor.extract_triples(text, record_id="test_001")
 
 print(f"Extracted {len(triples)} triples:")
 print()
@@ -134,7 +134,7 @@ print(f"Testing few-shot example effect on legal text...")
 print()
 
 extractor = KnowledgeGraphExtractor()
-triples = extractor.extract_from_text(text)
+triples = extractor.extract_triples(text)
 
 print(f"Extracted {len(triples)} triples:")
 print()
@@ -211,7 +211,7 @@ print(f"Long document test: {len(long_text)} characters")
 print()
 
 extractor = KnowledgeGraphExtractor()
-triples = extractor.extract_from_text(long_text, record_id="long_doc_test")
+triples = extractor.extract_triples(long_text, record_id="long_doc_test")
 
 print(f"Extracted {len(triples)} triples from long document")
 print()
@@ -291,7 +291,7 @@ print("Testing two-step extraction for connectivity improvement...")
 print()
 
 extractor = KnowledgeGraphExtractor()
-triples, metadata = extractor.extract_connected_graph(
+triples, metadata = extractor.augment_triples(
     text, 
     record_id="connectivity_test",
     max_disconnected=3,

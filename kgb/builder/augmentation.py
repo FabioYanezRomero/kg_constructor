@@ -14,7 +14,7 @@ import networkx as nx
 
 from ..clients import BaseLLMClient
 from ..domains import KnowledgeDomain, Triple, InferenceType
-from .extraction import extract_from_text, _prepare_prompt
+from .extraction import extract_triples, _render_prompt_template
 
 if TYPE_CHECKING:
     import langextract as lx
@@ -89,8 +89,8 @@ def _build_graph_from_triples(triples: list[Triple]) -> nx.DiGraph:
     return G
 
 
-def _format_example_for_client(raw_ex: dict[str, Any]) -> Any:
-    """Helper to convert raw dict to langextract ExampleData.
+def _build_examples(raw_ex: dict[str, Any]) -> Any:
+    """Build one example in the client-ready format for augmentation.
     
     Handles both extraction (text/extractions) and augmentation (input/output) formats.
     Properly converts extractions to lx.data.Extraction objects.
@@ -230,7 +230,7 @@ def connectivity_strategy(
     """
     augmentation_component = domain.get_augmentation("connectivity")
     aug_prompt_template = augmentation_prompt_override or augmentation_component.prompt
-    aug_examples = [_format_example_for_client(ex) for ex in augmentation_component.examples]
+    aug_examples = [_build_examples(ex) for ex in augmentation_component.examples]
     
     all_triples = list(triples)  # Copy to avoid mutating input
     iterations_data = []
@@ -254,7 +254,7 @@ def connectivity_strategy(
                 "disconnected_components": comp_text
             }
             
-            prompt_text = _prepare_prompt(aug_prompt_template, record)
+            prompt_text = _render_prompt_template(aug_prompt_template, record)
             
             # Call LLM for bridge triples using augment (NOT extract)
             # Augmentation generates NEW bridging triples that don't need source grounding
@@ -311,7 +311,7 @@ def connectivity_strategy(
 # Main Orchestrator (Backward Compatible)
 # =============================================================================
 
-def extract_connected_graph(
+def augment_triples(
     client: BaseLLMClient,
     domain: KnowledgeDomain,
     text: str,
@@ -365,7 +365,7 @@ def extract_connected_graph(
                     print(f"Warning: Skipping invalid initial triple: {e}")
         triples = validated_triples
     else:
-        triples = extract_from_text(
+        triples = extract_triples(
             client, domain, text, record_id, temperature, max_tokens, prompt_override
         )
 
@@ -391,11 +391,43 @@ def extract_connected_graph(
     )
 
 
+def extract_connected_graph(
+    client: BaseLLMClient,
+    domain: KnowledgeDomain,
+    text: str,
+    record_id: str | None = None,
+    initial_triples: list[Triple] | list[dict[str, Any]] | None = None,
+    temperature: float = 0.0,
+    max_tokens: int | None = None,
+    max_disconnected: int = 3,
+    max_iterations: int = 2,
+    augmentation_strategy: str = "connectivity",
+    prompt_override: str | None = None,
+    augmentation_prompt_override: str | None = None
+) -> tuple[list[Triple], dict[str, Any]]:
+    """Backward-compatible alias for ``augment_triples``."""
+    return augment_triples(
+        client=client,
+        domain=domain,
+        text=text,
+        record_id=record_id,
+        initial_triples=initial_triples,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        max_disconnected=max_disconnected,
+        max_iterations=max_iterations,
+        augmentation_strategy=augmentation_strategy,
+        prompt_override=prompt_override,
+        augmentation_prompt_override=augmentation_prompt_override,
+    )
+
+
 __all__ = [
     "AugmentationStrategy",
     "register_strategy",
     "list_strategies",
     "STRATEGIES",
     "connectivity_strategy",
+    "augment_triples",
     "extract_connected_graph",
 ]

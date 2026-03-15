@@ -13,7 +13,9 @@ from typing import Any
 
 __all__ = [
     # Core builder
+    "extract_triples",
     "extract_from_text",
+    "augment_triples",
     "extract_connected_graph",
     # Clients
     "ClientConfig",
@@ -31,9 +33,21 @@ __all__ = [
 ]
 
 
+def extract_triples(*args: Any, **kwargs: Any) -> Any:
+    """Extract triples from text."""
+    from .builder import extract_triples as _impl
+    return _impl(*args, **kwargs)
+
+
 def extract_from_text(*args: Any, **kwargs: Any) -> Any:
     """Extract triples from text."""
     from .builder import extract_from_text as _impl
+    return _impl(*args, **kwargs)
+
+
+def augment_triples(*args: Any, **kwargs: Any) -> Any:
+    """Augment triples using a builder strategy."""
+    from .builder import augment_triples as _impl
     return _impl(*args, **kwargs)
 
 

@@ -405,7 +405,7 @@ def extract(
         json_dir = output_dir / "extracted_json"
         json_dir.mkdir(parents=True, exist_ok=True)
         
-        from .builder import extract_from_text
+        from .builder import extract_triples
         
         output_files = {}
         for record in records:
@@ -414,7 +414,7 @@ def extract(
             output_path = json_dir / f"{record_id}.json"
             
             console.print(f"Processing {record_id} (extract only)...")
-            triples = extract_from_text(
+            triples = extract_triples(
                 client=llm_client,
                 domain=domain_obj,
                 text=text,
@@ -489,7 +489,7 @@ def augment_connectivity(
         json_dir = output_dir / "extracted_json"
         json_dir.mkdir(parents=True, exist_ok=True)
         
-        from .builder import extract_connected_graph
+        from .builder import augment_triples
         
         output_files = {}
         for record in records:
@@ -504,7 +504,7 @@ def augment_connectivity(
                     existing_triples = json.load(f)
             
             console.print(f"Processing {record_id} (augment connectivity)...")
-            triples, metadata = extract_connected_graph(
+            triples, metadata = augment_triples(
                 client=llm_client,
                 domain=domain_obj,
                 text=text,

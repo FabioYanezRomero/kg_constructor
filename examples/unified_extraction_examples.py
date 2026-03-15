@@ -16,7 +16,7 @@ from pathlib import Path
 # Import from the new modular structure
 from kgb.clients import ClientConfig, ClientFactory, GeminiClient
 from kgb.domains import get_domain, list_available_domains, Triple
-from kgb.builder import extract_from_text, extract_connected_graph, list_strategies
+from kgb.builder import extract_triples, augment_triples, list_strategies
 
 
 def example_gemini_api():
@@ -47,7 +47,7 @@ def example_gemini_api():
     under section 76 of the Police and Criminal Evidence Act 1984."""
 
     # Extract triples using the builder module
-    triples = extract_from_text(
+    triples = extract_triples(
         client=client,
         domain=domain,
         text=text,
@@ -95,7 +95,7 @@ def example_ollama_local():
     print("Pull model: ollama pull llama3.1\n")
 
     # Uncomment to run (requires Ollama server):
-    # triples = extract_from_text(client=client, domain=domain, text=text, record_id="example-ollama")
+    # triples = extract_triples(client=client, domain=domain, text=text, record_id="example-ollama")
     # for triple in triples:
     #     print(f"{triple.head} -> {triple.relation} -> {triple.tail}")
 
@@ -129,7 +129,7 @@ def example_lmstudio_local():
     # Uncomment to run (requires LM Studio server):
     # domain = get_domain("default")
     # text = "Sample text here..."
-    # triples = extract_from_text(client=client, domain=domain, text=text)
+    # triples = extract_triples(client=client, domain=domain, text=text)
 
     return []
 
@@ -190,7 +190,7 @@ def example_connected_graph_extraction():
     # This will:
     # 1. Extract initial triples
     # 2. Iteratively add bridging triples to reduce disconnected components
-    triples, metadata = extract_connected_graph(
+    triples, metadata = augment_triples(
         client=client,
         domain=domain,
         text=text,
@@ -248,7 +248,7 @@ def example_compare_clients():
     print("\n--- Gemini Extraction ---")
     gemini_config = ClientConfig(client_type="gemini")
     gemini_client = ClientFactory.create(gemini_config)
-    gemini_triples = extract_from_text(
+    gemini_triples = extract_triples(
         client=gemini_client,
         domain=domain,
         text=sample_text,
@@ -301,7 +301,7 @@ Extract triples in the form (head, relation, tail) with inference type."""
     text = """H is a three year old child. GB is the maternal grandmother.
     GB was granted a residence order in respect of H."""
 
-    triples = extract_from_text(
+    triples = extract_triples(
         client=client,
         domain=domain,
         text=text,
