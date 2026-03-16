@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ...visualization.network_viz import visualize_graph
-from ...visualization.entity_viz import EntityVisualizer
+from ...visualization.graph_viz import render_graph
+from ...visualization.text_viz import TextVisualizer
 from ..context import PipelineContext
 from ..step import register_step
 
@@ -51,7 +51,7 @@ class VisualizeNetworkStep:
             output_path = self.output_dir / f"{context.record_id}.html"
             
             # Visualize directly utilizing the triples sequence and the title inference
-            visualize_graph(
+            render_graph(
                 graph=context.triples,
                 output_path=output_path,
                 title=f"Knowledge Graph: {context.record_id}",
@@ -104,8 +104,8 @@ class VisualizeExtractionStep:
             self.output_dir.mkdir(parents=True, exist_ok=True)
             output_path = self.output_dir / f"{context.record_id}.html"
             
-            visualizer = EntityVisualizer(animation_speed=self.animation_speed)
-            visualizer.save_visualization(
+            visualizer = TextVisualizer(animation_speed=self.animation_speed)
+            visualizer.save_html(
                 text=context.text,
                 triples=context.triples,
                 output_path=output_path,

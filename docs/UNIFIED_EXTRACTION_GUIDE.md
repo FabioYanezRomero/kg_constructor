@@ -195,9 +195,9 @@ outputs/
 │   └── record-001.json
 ├── graphml/              # GraphML files
 │   └── record-001.graphml
-├── network_viz/          # Network visualizations
+├── graph_viz/            # Graph visualizations
 │   └── record-001.html
-└── extraction_viz/       # Extraction visualizations
+└── text_viz/             # Text visualizations
     └── record-001.html
 ```
 

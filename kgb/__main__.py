@@ -43,7 +43,7 @@ from rich.table import Table
 from .clients import ClientConfig, ClientFactory
 from .io.readers import load_records
 from .io.writers import convert_json_directory
-from .visualization import batch_visualize_graphs, EntityVisualizer
+from .visualization import batch_render_graphs, TextVisualizer
 from .domains import list_available_domains, ExtractionMode
 from .pipeline import (
     PipelineRunner, PipelineContext, get_step,
@@ -592,7 +592,7 @@ def visualize_network(
     viz_dir = output_dir or input_dir.parent / "visualizations"
     
     try:
-        html_files = batch_visualize_graphs(input_dir, viz_dir, dark_mode=dark_mode, layout=layout)
+        html_files = batch_render_graphs(input_dir, viz_dir, dark_mode=dark_mode, layout=layout)
         console.print(f"\n[bold green]✓ Created {len(html_files)} network visualizations[/bold green]")
         console.print(f"Output: {viz_dir}")
     except Exception as e:
@@ -623,7 +623,7 @@ def visualize_extraction(
     
     try:
         records = load_records(input_file, text_field, id_field, limit=limit)
-        visualizer = EntityVisualizer(animation_speed=animation_speed)
+        visualizer = TextVisualizer(animation_speed=animation_speed)
         
         # Prepare records for batch visualizer
         record_map = {}
@@ -636,7 +636,7 @@ def visualize_extraction(
                     triples = json.load(f)
                 record_map[rid] = (text, triples)
         
-        html_files = visualizer.batch_visualize(record_map, viz_dir, group_by=group_by)
+        html_files = visualizer.batch_render(record_map, viz_dir, group_by=group_by)
         console.print(f"\n[bold green]✓ Created {len(html_files)} extraction visualizations[/bold green]")
         console.print(f"Output: {viz_dir}")
     except Exception as e:

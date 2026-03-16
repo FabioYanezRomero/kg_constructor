@@ -21,7 +21,10 @@ __all__ = [
     "ClientConfig",
     "ClientFactory",
     # Visualization
+    "TextVisualizer",
     "EntityVisualizer",
+    "render_graph",
+    "batch_render_graphs",
     # Domains
     "get_domain",
     "KnowledgeDomain",
@@ -69,9 +72,27 @@ def ClientFactory(*args: Any, **kwargs: Any) -> Any:
     return _impl(*args, **kwargs)
 
 
+def TextVisualizer(*args: Any, **kwargs: Any) -> Any:
+    """Create a text visualizer for highlighting triples in source text."""
+    from .visualization import TextVisualizer as _impl
+    return _impl(*args, **kwargs)
+
+
 def EntityVisualizer(*args: Any, **kwargs: Any) -> Any:
-    """Create an entity visualizer for highlighting entities in text."""
+    """Backward-compatible alias for the text visualizer."""
     from .visualization import EntityVisualizer as _impl
+    return _impl(*args, **kwargs)
+
+
+def render_graph(*args: Any, **kwargs: Any) -> Any:
+    """Render an interactive graph visualization."""
+    from .visualization import render_graph as _impl
+    return _impl(*args, **kwargs)
+
+
+def batch_render_graphs(*args: Any, **kwargs: Any) -> Any:
+    """Render graph visualizations for all GraphML files in a directory."""
+    from .visualization import batch_render_graphs as _impl
     return _impl(*args, **kwargs)
 
 

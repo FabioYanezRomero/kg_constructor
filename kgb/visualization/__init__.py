@@ -1,11 +1,18 @@
 """Graph visualization module.
 
 Provides visualization tools for knowledge graphs:
-- Network visualization (Plotly) - shows nodes and edges
-- Entity highlighting (langextract) - highlights entities in source text
+- Graph visualization (Plotly) - shows nodes and edges
+- Text highlighting (langextract) - highlights triples in source text
 """
 
-from .network_viz import visualize_graph, batch_visualize_graphs
-from .entity_viz import EntityVisualizer
+from .graph_viz import render_graph, batch_render_graphs, visualize_graph, batch_visualize_graphs
+from .text_viz import TextVisualizer, EntityVisualizer
 
-__all__ = ["visualize_graph", "batch_visualize_graphs", "EntityVisualizer"]
+__all__ = [
+    "render_graph",
+    "batch_render_graphs",
+    "TextVisualizer",
+    "visualize_graph",
+    "batch_visualize_graphs",
+    "EntityVisualizer",
+]

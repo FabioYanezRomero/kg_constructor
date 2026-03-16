@@ -171,8 +171,8 @@ kgb/
 │   ├── default/             # Default domain resources
 │   └── legal/               # Legal domain resources
 └── visualization/           # Visualization engines
-    ├── network_viz.py       # Plotly network graphs
-    └── entity_viz.py        # Entity text highlighting
+    ├── graph_viz.py         # Plotly graph renderers
+    └── text_viz.py          # Triple text highlighting
 ```
 
 ### Client Abstraction
