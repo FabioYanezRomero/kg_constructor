@@ -388,24 +388,3 @@ def extract_triples(
     )
     _warn_on_schema_validation("extraction", validation_summary)
     return validated_triples
-
-
-def extract_from_text(
-    client: BaseLLMClient,
-    domain: KnowledgeDomain,
-    text: str,
-    record_id: str | None = None,
-    temperature: float = 0.0,
-    max_tokens: int | None = None,
-    prompt_override: str | None = None
-) -> list[Triple]:
-    """Backward-compatible alias for ``extract_triples``."""
-    return extract_triples(
-        client=client,
-        domain=domain,
-        text=text,
-        record_id=record_id,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        prompt_override=prompt_override,
-    )

@@ -1,4 +1,4 @@
-"""Knowledge graph constructor package.
+"""Knowledge Graph Builder (KGB) package.
 
 Primary interface is the CLI:
     kgb extract --input data.jsonl --domain legal
@@ -14,15 +14,12 @@ from typing import Any
 __all__ = [
     # Core builder
     "extract_triples",
-    "extract_from_text",
     "augment_triples",
-    "extract_connected_graph",
     # Clients
     "ClientConfig",
     "ClientFactory",
     # Visualization
     "TextVisualizer",
-    "EntityVisualizer",
     "render_graph",
     "batch_render_graphs",
     # Domains
@@ -42,21 +39,9 @@ def extract_triples(*args: Any, **kwargs: Any) -> Any:
     return _impl(*args, **kwargs)
 
 
-def extract_from_text(*args: Any, **kwargs: Any) -> Any:
-    """Extract triples from text."""
-    from .builder import extract_from_text as _impl
-    return _impl(*args, **kwargs)
-
-
 def augment_triples(*args: Any, **kwargs: Any) -> Any:
     """Augment triples using a builder strategy."""
     from .builder import augment_triples as _impl
-    return _impl(*args, **kwargs)
-
-
-def extract_connected_graph(*args: Any, **kwargs: Any) -> Any:
-    """Extract and augment graph connectivity."""
-    from .builder import extract_connected_graph as _impl
     return _impl(*args, **kwargs)
 
 
@@ -75,12 +60,6 @@ def ClientFactory(*args: Any, **kwargs: Any) -> Any:
 def TextVisualizer(*args: Any, **kwargs: Any) -> Any:
     """Create a text visualizer for highlighting triples in source text."""
     from .visualization import TextVisualizer as _impl
-    return _impl(*args, **kwargs)
-
-
-def EntityVisualizer(*args: Any, **kwargs: Any) -> Any:
-    """Backward-compatible alias for the text visualizer."""
-    from .visualization import EntityVisualizer as _impl
     return _impl(*args, **kwargs)
 
 

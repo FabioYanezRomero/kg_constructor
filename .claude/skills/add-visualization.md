@@ -15,7 +15,7 @@ Visualizations render knowledge graphs as interactive HTML. The system provides:
                      Visualization Module
     ┌────────────────────────────────────────────────────┐
     │                                                    │
-    │  network_viz.py          entity_viz.py             │
+    │  graph_viz.py            text_viz.py               │
     │  ├─ Plotly-based         ├─ langextract-based      │
     │  ├─ Graph topology       ├─ Text highlighting      │
     │  └─ Nodes & edges        └─ Entity spans           │
@@ -30,8 +30,8 @@ Data Flow:
 ```
 
 **Key Files:**
-- `kgb/visualization/network_viz.py` - Graph topology using Plotly + NetworkX
-- `kgb/visualization/entity_viz.py` - Text entity highlighting using langextract
+- `kgb/visualization/graph_viz.py` - Graph topology using Plotly + NetworkX
+- `kgb/visualization/text_viz.py` - Text entity highlighting using langextract
 - `kgb/visualization/__init__.py` - Public exports
 
 ## Dependencies
@@ -206,14 +206,14 @@ def _extract_events_from_triples(triples, date_field):
 Update `kgb/visualization/__init__.py`:
 
 ```python
-from .network_viz import visualize_graph, batch_visualize_graphs
-from .entity_viz import EntityVisualizer
+from .graph_viz import render_graph, batch_render_graphs
+from .text_viz import TextVisualizer
 from .timeline_viz import visualize_timeline
 
 __all__ = [
-    "visualize_graph",
-    "batch_visualize_graphs",
-    "EntityVisualizer",
+    "render_graph",
+    "batch_render_graphs",
+    "TextVisualizer",
     "visualize_timeline",
 ]
 ```

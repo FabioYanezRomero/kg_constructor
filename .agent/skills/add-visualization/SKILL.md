@@ -13,7 +13,7 @@ This skill guides you through adding a new visualization type to `kgb/visualizat
                      Visualization Module
     ┌────────────────────────────────────────────────────┐
     │                                                    │
-    │  network_viz.py          entity_viz.py             │
+    │  graph_viz.py            text_viz.py               │
     │  ├─ Plotly-based         ├─ langextract-based      │
     │  ├─ Graph topology       ├─ Text highlighting      │
     │  └─ Nodes & edges        └─ Entity spans           │
@@ -28,8 +28,8 @@ Data Flow:
 ```
 
 **Key Files:**
-- [network_viz.py](file:///app/kgb/visualization/network_viz.py) - Graph topology using Plotly + NetworkX
-- [entity_viz.py](file:///app/kgb/visualization/entity_viz.py) - Text entity highlighting using langextract
+- [graph_viz.py](file:///app/kgb/visualization/graph_viz.py) - Graph topology using Plotly + NetworkX
+- [text_viz.py](file:///app/kgb/visualization/text_viz.py) - Text entity highlighting using langextract
 - [__init__.py](file:///app/kgb/visualization/__init__.py) - Public exports
 
 ## Dependencies
@@ -248,14 +248,14 @@ __all__ = ["visualize_timeline"]
 Update `kgb/visualization/__init__.py`:
 
 ```python
-from .network_viz import visualize_graph, batch_visualize_graphs
-from .entity_viz import EntityVisualizer
+from .graph_viz import render_graph, batch_render_graphs
+from .text_viz import TextVisualizer
 from .timeline_viz import visualize_timeline
 
 __all__ = [
-    "visualize_graph",
-    "batch_visualize_graphs",
-    "EntityVisualizer",
+    "render_graph",
+    "batch_render_graphs",
+    "TextVisualizer",
     "visualize_timeline",
 ]
 ```
@@ -412,7 +412,7 @@ def test_timeline_cli_integration(tmp_path):
 | `dark_mode` | bool | False | Use dark color theme |
 | `date_field` | str | "date" | Attribute name containing dates |
 | `height` | int | 600 | Canvas height in pixels |
-| `layout` | str | "spring" | Layout algorithm (network_viz) |
+| `layout` | str | "spring" | Layout algorithm (graph_viz) |
 
 ---
 

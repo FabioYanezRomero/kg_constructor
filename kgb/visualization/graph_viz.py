@@ -266,43 +266,8 @@ def batch_render_graphs(
     return html_files
 
 
-def visualize_graph(
-    graph: nx.Graph | str | Path | list[Triple] | list[dict[str, Any]],
-    output_path: Path | str | None = None,
-    title: str | None = None,
-    dark_mode: bool = False,
-    layout: str = "spring",
-    auto_open: bool = False,
-) -> go.Figure:
-    """Backward-compatible alias for ``render_graph``."""
-    return render_graph(
-        graph=graph,
-        output_path=output_path,
-        title=title,
-        dark_mode=dark_mode,
-        layout=layout,
-        auto_open=auto_open,
-    )
-
-
-def batch_visualize_graphs(
-    input_dir: Path | str,
-    output_dir: Path | str | None = None,
-    dark_mode: bool = False,
-    layout: str = "spring",
-) -> list[Path]:
-    """Backward-compatible alias for ``batch_render_graphs``."""
-    return batch_render_graphs(
-        input_dir=input_dir,
-        output_dir=output_dir,
-        dark_mode=dark_mode,
-        layout=layout,
-    )
-
 
 __all__ = [
     "render_graph",
     "batch_render_graphs",
-    "visualize_graph",
-    "batch_visualize_graphs",
 ]

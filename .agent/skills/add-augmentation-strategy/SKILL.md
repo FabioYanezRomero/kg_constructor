@@ -12,7 +12,7 @@ This skill guides you through adding a new augmentation strategy to the `kgb/bui
 ```mermaid
 flowchart LR
     subgraph Step1["Step 1: Extraction"]
-        A[Text] --> B[extract_from_text]
+        A[Text] --> B[extract_triples]
         B --> C[Initial Triples]
     end
     subgraph Step2["Step 2: Augmentation"]
@@ -181,7 +181,7 @@ def augment_enrichment(
     # ... see augment_connectivity for full option list
 ):
     """Enrichment augmentation: Add missing entity attributes."""
-    from .builder import extract_connected_graph
+    from .builder import augment_triples
     from .datasets import load_records
     from .domains import get_domain
     
@@ -195,7 +195,7 @@ def augment_enrichment(
     
     for record in records:
         record_id = str(record["id"])
-        triples, metadata = extract_connected_graph(
+        triples, metadata = augment_triples(
             client=llm_client,
             domain=domain_obj,
             text=record["text"],

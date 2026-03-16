@@ -9,10 +9,9 @@ Extensibility:
 - Use `list_strategies()` to discover available strategies.
 """
 
-from .extraction import extract_triples, extract_from_text
+from .extraction import extract_triples
 from .augmentation import (
     augment_triples,
-    extract_connected_graph,
     AugmentationStrategy,
     register_strategy,
     list_strategies,
@@ -21,9 +20,7 @@ from .augmentation import (
 
 __all__ = [
     "extract_triples",
-    "extract_from_text",
     "augment_triples",
-    "extract_connected_graph",
     "AugmentationStrategy",
     "register_strategy",
     "list_strategies",

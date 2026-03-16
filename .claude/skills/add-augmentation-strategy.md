@@ -16,7 +16,7 @@ Step 1: Extraction          Step 2: Augmentation
     Text                        Initial Triples
       │                              │
       ▼                              ▼
-extract_from_text           Strategy Dispatcher
+extract_triples             Strategy Dispatcher
       │                       ┌──────┴──────┐
       ▼                       ▼             ▼
 Initial Triples        connectivity    your_strategy
@@ -170,7 +170,7 @@ def augment_enrichment(
     client: ClientType = typer.Option(ClientType.GEMINI, "--client", "-c"),
 ):
     """Enrichment augmentation: Add missing entity attributes."""
-    from .builder import extract_connected_graph
+    from .builder import augment_triples
     from .datasets import load_records
     from .domains import get_domain
     
@@ -184,7 +184,7 @@ def augment_enrichment(
     
     for record in records:
         record_id = str(record["id"])
-        triples, metadata = extract_connected_graph(
+        triples, metadata = augment_triples(
             client=llm_client,
             domain=domain_obj,
             text=record["text"],

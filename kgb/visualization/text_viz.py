@@ -361,49 +361,7 @@ class TextVisualizer:
         return created_files
 
 
-class EntityVisualizer(TextVisualizer):
-    """Backward-compatible alias for ``TextVisualizer``."""
-
-    def visualize_triples(
-        self,
-        text: str,
-        triples: list[Triple] | list[dict[str, Any]],
-        document_id: str | None = None,
-        group_by: str = "entity_type",
-    ) -> str:
-        return self.render_triples_in_text(
-            text=text,
-            triples=triples,
-            document_id=document_id,
-            group_by=group_by,
-        )
-
-    def save_visualization(
-        self,
-        text: str,
-        triples: list[Triple] | list[dict[str, Any]],
-        output_path: Path | str,
-        document_id: str | None = None,
-        group_by: str = "entity_type",
-    ) -> Path:
-        return self.save_html(
-            text=text,
-            triples=triples,
-            output_path=output_path,
-            document_id=document_id,
-            group_by=group_by,
-        )
-
-    def batch_visualize(
-        self,
-        records: dict[str, tuple[str, list[Triple] | list[dict[str, Any]]]],
-        output_dir: Path | str,
-        group_by: str = "entity_type",
-    ) -> list[Path]:
-        return self.batch_render(records=records, output_dir=output_dir, group_by=group_by)
-
 
 __all__ = [
     "TextVisualizer",
-    "EntityVisualizer",
 ]

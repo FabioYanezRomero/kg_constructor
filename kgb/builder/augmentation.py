@@ -273,7 +273,7 @@ def connectivity_strategy(
 
 
 # =============================================================================
-# Main Orchestrator (Backward Compatible)
+# Main Orchestrator
 # =============================================================================
 
 def augment_triples(
@@ -372,36 +372,6 @@ def augment_triples(
     return triples, metadata
 
 
-def extract_connected_graph(
-    client: BaseLLMClient,
-    domain: KnowledgeDomain,
-    text: str,
-    record_id: str | None = None,
-    initial_triples: list[Triple] | list[dict[str, Any]] | None = None,
-    temperature: float = 0.0,
-    max_tokens: int | None = None,
-    max_disconnected: int = 3,
-    max_iterations: int = 2,
-    augmentation_strategy: str = "connectivity",
-    prompt_override: str | None = None,
-    augmentation_prompt_override: str | None = None
-) -> tuple[list[Triple], dict[str, Any]]:
-    """Backward-compatible alias for ``augment_triples``."""
-    return augment_triples(
-        client=client,
-        domain=domain,
-        text=text,
-        record_id=record_id,
-        initial_triples=initial_triples,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        max_disconnected=max_disconnected,
-        max_iterations=max_iterations,
-        augmentation_strategy=augmentation_strategy,
-        prompt_override=prompt_override,
-        augmentation_prompt_override=augmentation_prompt_override,
-    )
-
 
 __all__ = [
     "AugmentationStrategy",
@@ -410,5 +380,4 @@ __all__ = [
     "STRATEGIES",
     "connectivity_strategy",
     "augment_triples",
-    "extract_connected_graph",
 ]
