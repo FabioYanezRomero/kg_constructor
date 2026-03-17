@@ -14,13 +14,13 @@ import networkx as nx
 
 from ..clients import BaseLLMClient
 from ..domains import KnowledgeDomain, Triple, InferenceType
-from .extraction import (
-    _build_schema_guidance,
-    _collect_schema_constraints,
-    _render_prompt_template,
-    _validate_triples_against_schema,
-    _warn_on_schema_validation,
-    extract_triples,
+from .extraction import extract_triples
+from .validation import (
+    build_schema_guidance,
+    collect_schema_constraints,
+    render_prompt_template,
+    validate_triples_against_schema,
+    warn_on_schema_validation,
 )
 
 # =============================================================================
@@ -178,7 +178,7 @@ def connectivity_strategy(
     """
     augmentation_component = domain.get_augmentation("connectivity")
     aug_prompt_template = augmentation_prompt_override or augmentation_component.prompt
-    constraints = _collect_schema_constraints(domain, augmentation_component.examples)
+    constraints = collect_schema_constraints(domain, augmentation_component.examples)
     
     all_triples = list(triples)  # Copy to avoid mutating input
     iterations_data = []
@@ -202,10 +202,10 @@ def connectivity_strategy(
                 "disconnected_components": comp_text
             }
             
-            final_prompt = _render_prompt_template(
+            final_prompt = render_prompt_template(
                 aug_prompt_template,
                 record,
-                schema_guidance=_build_schema_guidance(constraints),
+                schema_guidance=build_schema_guidance(constraints),
             )
             
             # Call LLM for bridge triples using augment (NOT extract)
@@ -230,12 +230,12 @@ def connectivity_strategy(
                 except Exception as e:
                     print(f"Warning: Skipping invalid augmented triple: {e}")
 
-            validated_new_triples, validation_summary = _validate_triples_against_schema(
+            validated_new_triples, validation_summary = validate_triples_against_schema(
                 new_triples,
                 constraints,
                 raw_triples=normalized_new_triples_raw,
             )
-            _warn_on_schema_validation("augmentation", validation_summary)
+            warn_on_schema_validation("augmentation", validation_summary)
 
             all_triples.extend(validated_new_triples)
             iterations_data.append({
@@ -334,14 +334,14 @@ def augment_triples(
                     raw_validated_triples.append(t)
                 except Exception as e:
                     print(f"Warning: Skipping invalid initial triple: {e}")
-        extraction_constraints = _collect_schema_constraints(domain, domain.extraction.examples)
-        triples, validation_summary = _validate_triples_against_schema(
+        extraction_constraints = collect_schema_constraints(domain, domain.extraction.examples)
+        triples, validation_summary = validate_triples_against_schema(
             validated_triples,
             extraction_constraints,
             raw_triples=raw_validated_triples,
         )
         initial_schema_validation = validation_summary
-        _warn_on_schema_validation("augmentation bootstrap", validation_summary)
+        warn_on_schema_validation("augmentation bootstrap", validation_summary)
     else:
         triples = extract_triples(
             client, domain, text, record_id, temperature, max_tokens, prompt_override
