@@ -1,7 +1,7 @@
 """Graph visualization module.
 
 Provides visualization tools for knowledge graphs:
-- Graph visualization (Plotly) - shows nodes and edges
+- Graph visualization (Cytoscape.js) - shows nodes and edges
 - Text highlighting (langextract) - highlights triples in source text
 """
 
