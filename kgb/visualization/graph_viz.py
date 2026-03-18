@@ -234,7 +234,7 @@ def _build_stylesheet(dark_mode: bool, max_degree: int, edge_count: int) -> list
                 "border-width": 2.5 if dark_mode else 2,
                 "border-color": node_border,
                 "text-outline-width": 2,
-                "text-outline-color": "#0f172a" if dark_mode else "#ffffff",
+                "text-outline-color": "#0f172a" if dark_mode else "#e2e8f0",
                 "min-zoomed-font-size": 8,
             },
         },
@@ -273,7 +273,7 @@ def _build_stylesheet(dark_mode: bool, max_degree: int, edge_count: int) -> list
                 "font-size": "9px",
                 "color": text_color,
                 "text-rotation": "autorotate",
-                "text-background-color": "#0f172a" if dark_mode else "#ffffff",
+                "text-background-color": "#0f172a" if dark_mode else "#e2e8f0",
                 "text-background-opacity": 0.7,
                 "text-background-padding": "2px",
                 "min-zoomed-font-size": 8,
@@ -429,12 +429,12 @@ def _build_html_template(
     dark_mode: bool,
 ) -> str:
     """Generate standalone HTML with embedded Cytoscape.js."""
-    bg = "#0f172a" if dark_mode else "#f8fafc"
-    card_bg = "rgba(30, 41, 59, 0.7)" if dark_mode else "rgba(255, 255, 255, 0.8)"
+    bg = "#0f172a" if dark_mode else "#e2e8f0"
+    card_bg = "rgba(30, 41, 59, 0.7)" if dark_mode else "rgba(241, 245, 249, 0.85)"
     text_color = "#f1f5f9" if dark_mode else "#1e293b"
-    muted = "#94a3b8" if dark_mode else "#64748b"
-    border_color = "rgba(255, 255, 255, 0.1)" if dark_mode else "rgba(0, 0, 0, 0.08)"
-    input_bg = "rgba(255,255,255,0.05)" if dark_mode else "rgba(0,0,0,0.04)"
+    muted = "#94a3b8" if dark_mode else "#475569"
+    border_color = "rgba(255, 255, 255, 0.1)" if dark_mode else "rgba(0, 0, 0, 0.12)"
+    input_bg = "rgba(255,255,255,0.05)" if dark_mode else "rgba(0,0,0,0.06)"
     initial_theme = "dark" if dark_mode else "light"
 
     return f"""<!DOCTYPE html>
@@ -706,12 +706,12 @@ def _build_html_template(
 
   /* Theme overrides */
   body.light {{
-    --bg: #f8fafc;
-    --card-bg: rgba(255, 255, 255, 0.8);
+    --bg: #e2e8f0;
+    --card-bg: rgba(241, 245, 249, 0.85);
     --text: #1e293b;
-    --muted: #64748b;
-    --border: rgba(0, 0, 0, 0.08);
-    --input-bg: rgba(0, 0, 0, 0.04);
+    --muted: #475569;
+    --border: rgba(0, 0, 0, 0.12);
+    --input-bg: rgba(0, 0, 0, 0.06);
   }}
 
   body.dark {{
@@ -924,9 +924,9 @@ def _build_html_template(
       edgeOpacity: 0.9, edgeWidth: 3, borderWidth: 2.5, bgColor: '#0f172a'
     }},
     light: {{
-      text: '#1e293b', outline: '#ffffff', border: '#475569',
+      text: '#1e293b', outline: '#e2e8f0', border: '#475569',
       blue: '#1d4ed8', amber: '#b45309',
-      edgeOpacity: 0.75, edgeWidth: 2, borderWidth: 2, bgColor: '#ffffff'
+      edgeOpacity: 0.75, edgeWidth: 2, borderWidth: 2, bgColor: '#e2e8f0'
     }}
   }};
 
