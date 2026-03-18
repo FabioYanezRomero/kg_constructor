@@ -19,10 +19,10 @@ if [ -d "/app/kgb" ]; then
     PYTHON="python3"
     OLLAMA_BASE_URL="http://host.docker.internal:11434"  # Docker networking
 else
-    BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+    BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
     # Use venv Python if available (system Python may lack dependencies)
-    if [ -x "${BASE_DIR}/.venv/bin/python3" ]; then
-        PYTHON="${BASE_DIR}/.venv/bin/python3"
+    if [ -x "${BASE_DIR}/.venv/bin/python" ]; then
+        PYTHON="${BASE_DIR}/.venv/bin/python"
     else
         PYTHON="python3"
     fi

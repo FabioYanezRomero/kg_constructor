@@ -1,6 +1,6 @@
 # Adding a Dataset Format
 
-This skill documents how to add a new input format loader to `kgb/datasets/__init__.py`.
+This skill documents how to add a new input format loader to `kgb/io/readers/`.
 
 ## Overview
 
@@ -13,10 +13,10 @@ Dataset loaders parse input files and return normalized records for extraction. 
 ## Architecture
 
 ```
-                        Datasets Module
+                        IO Module
     ┌───────────────────────────────────────────────────────────┐
     │                                                           │
-    │  __init__.py                                              │
+    │  io/readers/__init__.py                                   │
     │  ├─ DataLoadError         # Custom exception              │
     │  ├─ detect_format()       # Auto-detect from extension    │
     │  ├─ load_records()        # Main dispatcher + normalizer  │
@@ -25,6 +25,9 @@ Dataset loaders parse input files and return normalized records for extraction. 
     │  ├─ _load_json()          # JSON loader (array of objs)   │
     │  ├─ _load_csv()           # CSV loader (tabular)          │
     │  └─ _load_<format>()      # Your new loader               │
+    │                                                           │
+    │  io/writers/                                              │
+    │  └─ graphml.py            # Output conversion (separate)  │
     │                                                           │
     └───────────────────────────────────────────────────────────┘
 
@@ -44,7 +47,7 @@ Data Flow:
 
 ## DataLoadError Class
 
-The custom exception used by all loaders:
+The custom exception used by all loaders (defined in `kgb/io/readers/__init__.py`):
 
 ```python
 class DataLoadError(Exception):
@@ -64,29 +67,29 @@ All loaders follow this pattern:
 ```python
 def _load_<format>(path: Path) -> list[dict[str, Any]]:
     """Load records from <Format> file.
-    
+
     Args:
         path: Path to input file
-        
+
     Returns:
         List of record dictionaries (unnormalized)
-        
+
     Raises:
         DataLoadError: If file cannot be parsed
     """
 ```
 
-> Loaders return **raw** records. Field normalization happens in `load_records()`.
+> Loaders return **raw** records. Field normalization (mapping custom field names to `text`/`id`) happens in `load_records()`.
 
 ## Step 2: Implement Your Loader
 
-Add to `kgb/datasets/__init__.py`:
+Add to `kgb/io/readers/__init__.py`:
 
 ```python
 def _load_parquet(path: Path) -> list[dict[str, Any]]:
     """Load records from Parquet file.
-    
-    Requires: pip install pyarrow
+
+    Requires: pip install pandas pyarrow
     """
     try:
         import pandas as pd
@@ -95,21 +98,21 @@ def _load_parquet(path: Path) -> list[dict[str, Any]]:
             "Parquet support requires pandas: pip install pandas pyarrow",
             path
         )
-    
+
     try:
         df = pd.read_parquet(path)
     except Exception as e:
         raise DataLoadError(f"Failed to read Parquet file: {e}", path) from e
-    
+
     if df.empty:
-        raise DataLoadError(f"Parquet file is empty", path)
-    
+        raise DataLoadError("Parquet file is empty", path)
+
     return df.to_dict('records')
 ```
 
 ## Step 3: Register in Dispatcher
 
-### Update `detect_format`
+### Update `detect_format()`
 
 ```python
 def detect_format(path: Path) -> str:
@@ -123,10 +126,15 @@ def detect_format(path: Path) -> str:
     elif suffix in ('.parquet', '.pq'):  # Add new extensions
         return 'parquet'
     else:
-        raise DataLoadError(f"Unknown file format: {suffix}", path)
+        raise DataLoadError(
+            f"Unknown file format: {suffix}. Supported: .jsonl, .json, .csv, .parquet",
+            path
+        )
 ```
 
-### Update `load_records` Dispatcher
+### Update `load_records()` Dispatcher
+
+In the existing `load_records()` function, add the new format branch:
 
 ```python
 if format_type == 'jsonl':
@@ -144,31 +152,31 @@ elif format_type == 'parquet':  # Add new format
 ### Check Import
 
 ```bash
-python -c "from kgb.datasets import load_records; print('OK')"
+python -c "from kgb.io import load_records; print('OK')"
 ```
 
-### Unit Test
+### Unit Tests
 
 ```python
 def test_load_parquet_basic(tmp_path):
     import pandas as pd
-    from kgb.datasets import load_records
-    
+    from kgb.io import load_records
+
     df = pd.DataFrame({
         "doc_id": ["1", "2"],
         "content": ["Text A", "Text B"],
         "meta": ["X", "Y"]
     })
-    
+
     parquet_file = tmp_path / "test.parquet"
     df.to_parquet(parquet_file)
-    
+
     records = load_records(
         parquet_file,
         text_field="content",
         id_field="doc_id"
     )
-    
+
     assert len(records) == 2
     assert records[0]["text"] == "Text A"  # Normalized
     assert records[0]["id"] == "1"
@@ -176,21 +184,21 @@ def test_load_parquet_basic(tmp_path):
 
 def test_load_parquet_missing_field(tmp_path):
     import pandas as pd
-    from kgb.datasets import load_records, DataLoadError
+    from kgb.io import load_records, DataLoadError
     import pytest
-    
+
     df = pd.DataFrame({"wrong_field": ["A", "B"]})
     parquet_file = tmp_path / "bad.parquet"
     df.to_parquet(parquet_file)
-    
+
     with pytest.raises(DataLoadError, match="Missing text field"):
         load_records(parquet_file)
 
 
 def test_detect_format_parquet():
-    from kgb.datasets import detect_format
+    from kgb.io.readers import detect_format
     from pathlib import Path
-    
+
     assert detect_format(Path("data.parquet")) == "parquet"
     assert detect_format(Path("data.pq")) == "parquet"
 ```
@@ -207,7 +215,7 @@ doc_id,body,author
 
 **Load Call:**
 ```python
-records = load_records("data.csv", text_field="body", id_field="doc_id")
+records = load_records(Path("data.csv"), text_field="body", id_field="doc_id")
 ```
 
 **Output:**
@@ -226,8 +234,8 @@ kgb extract --input data.parquet --domain legal
 # Custom field names
 kgb extract --input data.csv --text-field content --id-field doc_id
 
-# Limit records for testing
-kgb extract --input large.jsonl --domain legal --limit 10
+# Filter specific records
+kgb extract --input large.jsonl --domain legal --record-ids REC-001,REC-002
 ```
 
 ## Key Principles
@@ -244,14 +252,20 @@ kgb extract --input large.jsonl --domain legal --limit 10
 | Exception | When | Action |
 |-----------|------|--------|
 | `DataLoadError` | Parse failure, empty file, missing field | Fail with path |
-| `FileNotFoundError` | File doesn't exist | Raised by `load_records` |
+| `FileNotFoundError` | File doesn't exist | Raised by `load_records` via DataLoadError |
 | `ImportError` | Missing optional library | Catch, raise `DataLoadError` |
+
+## Files to Modify
+
+| File | Action |
+|------|--------|
+| `kgb/io/readers/__init__.py` | Modify — add `_load_<format>()`, update `detect_format()` and `load_records()` |
 
 ## Verification Checklist
 
 - [ ] Loader returns `list[dict[str, Any]]`
 - [ ] Uses `DataLoadError` for all failures
 - [ ] Lazy imports for optional dependencies
-- [ ] Extension(s) in `detect_format`
-- [ ] Dispatcher updated in `load_records`
+- [ ] Extension(s) added to `detect_format()`
+- [ ] Dispatcher updated in `load_records()`
 - [ ] Tests for happy path, errors, empty file

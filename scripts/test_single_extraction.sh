@@ -18,7 +18,7 @@
 
 # Model Configuration
 MODEL_PROVIDER="gemini"  # Options: gemini, ollama, lmstudio
-MODEL_NAME="gemini-3-flash-preview"  # For gemini: gemini-2.0-flash, gemini-2.5-flash, etc.
+MODEL_NAME="gemini-2.5-flash"  # For gemini: gemini-2.0-flash, gemini-2.5-flash, etc.
 TEMPERATURE=0.0
 
 # Base directory detection (Docker vs local)
@@ -26,10 +26,10 @@ if [ -d "/app/kgb" ]; then
     BASE_DIR="/app"
     PYTHON="python3"
 else
-    BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+    BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
     # Use venv Python if available (system Python may lack dependencies)
-    if [ -x "${BASE_DIR}/.venv/bin/python3" ]; then
-        PYTHON="${BASE_DIR}/.venv/bin/python3"
+    if [ -x "${BASE_DIR}/.venv/bin/python" ]; then
+        PYTHON="${BASE_DIR}/.venv/bin/python"
     else
         PYTHON="python3"
     fi
@@ -132,6 +132,32 @@ echo "==========================================================================
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
+
+# Save run metadata
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+cat > "$OUTPUT_DIR/metadata.json" <<EOF
+{
+  "timestamp": "$TIMESTAMP",
+  "model_provider": "$MODEL_PROVIDER",
+  "model_name": "$MODEL_NAME",
+  "temperature": $TEMPERATURE,
+  "domain": "$DOMAIN",
+  "mode": "$MODE",
+  "input_file": "$INPUT_FILE",
+  "text_field": "$TEXT_FIELD",
+  "id_field": "$ID_FIELD",
+  "record_ids": "$RECORD_IDS",
+  "max_disconnected": $MAX_DISCONNECTED,
+  "max_iterations": $MAX_ITERATIONS,
+  "max_workers": "${MAX_WORKERS:-null}",
+  "timeout": $TIMEOUT,
+  "create_network_viz": $CREATE_NETWORK_VIZ,
+  "create_extraction_viz": $CREATE_EXTRACTION_VIZ,
+  "dark_mode": $DARK_MODE,
+  "layout": "$LAYOUT",
+  "group_by": "$GROUP_BY"
+}
+EOF
 
 # Build common CLI options
 CLI_OPTS=""

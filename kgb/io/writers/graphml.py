@@ -100,7 +100,7 @@ def json_to_graphml(
         # Build edge attributes
         edge_attrs = {
             "relation": t.relation,
-            "inference": str(t.inference)
+            "inference": t.inference.value
         }
 
         G.add_edge(head, tail, **edge_attrs)

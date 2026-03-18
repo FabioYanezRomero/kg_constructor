@@ -50,7 +50,7 @@ def render_graph(
         G = nx.DiGraph()
         for t in graph:
             if isinstance(t, Triple):
-                G.add_edge(t.head, t.tail, relation=t.relation, inference=str(t.inference))
+                G.add_edge(t.head, t.tail, relation=t.relation, inference=t.inference.value)
             else:
                 G.add_edge(t.get("head"), t.get("tail"), **{k: v for k, v in t.items() if k not in ["head", "tail"]})
         if title is None:
