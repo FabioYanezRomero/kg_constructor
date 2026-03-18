@@ -6,6 +6,7 @@ node/edge hover information and origin-based coloring (extracted vs augmented).
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,100 @@ import networkx as nx
 import plotly.graph_objects as go
 
 
+from networkx.algorithms.community import greedy_modularity_communities
+
 from ..domains import Triple
+
+
+def _resolve_overlaps(
+    pos: dict, G: nx.DiGraph | nx.Graph, iterations: int = 50, pad: float = 0.03
+) -> dict:
+    """Push apart nodes whose positions overlap.
+
+    Each node has a radius proportional to its marker size (20 + degree*2),
+    normalised into layout-coordinate space.  When two radii overlap (plus
+    *pad* clearance), both nodes are nudged apart along the line between
+    them.  The process repeats for *iterations* rounds or until no overlaps
+    remain.
+    """
+    nodes = list(pos.keys())
+    n = len(nodes)
+    if n < 2:
+        return pos
+
+    # Work with mutable lists for speed
+    xs = [pos[nd][0] for nd in nodes]
+    ys = [pos[nd][1] for nd in nodes]
+
+    # Compute per-node radius in layout-coordinate scale.
+    # Marker sizes are 20+degree*2 pixels on a 1400-wide figure whose
+    # layout coords span roughly [-1, 1], so 1 layout unit ≈ 700 px.
+    px_to_coord = 1.0 / 700.0
+    radii = [(20 + G.degree(nd) * 2) * px_to_coord for nd in nodes]
+
+    for _ in range(iterations):
+        moved = False
+        for i in range(n):
+            for j in range(i + 1, n):
+                dx = xs[j] - xs[i]
+                dy = ys[j] - ys[i]
+                dist = math.hypot(dx, dy)
+                min_dist = radii[i] + radii[j] + pad
+                if dist < min_dist:
+                    if dist == 0:
+                        # Coincident — nudge in arbitrary direction
+                        dx, dy, dist = 0.01, 0.01, math.hypot(0.01, 0.01)
+                    overlap = (min_dist - dist) / 2.0
+                    ux, uy = dx / dist, dy / dist
+                    xs[i] -= ux * overlap
+                    ys[i] -= uy * overlap
+                    xs[j] += ux * overlap
+                    ys[j] += uy * overlap
+                    moved = True
+        if not moved:
+            break
+
+    return {nd: (xs[k], ys[k]) for k, nd in enumerate(nodes)}
+
+
+def _community_layout(G: nx.DiGraph | nx.Graph) -> dict:
+    """Two-level layout: position community clusters, then nodes within each."""
+    UG = G.to_undirected()
+    communities = list(greedy_modularity_communities(UG))
+
+    if len(communities) <= 1:
+        n = G.number_of_nodes()
+        k = 3.0 / math.sqrt(n) if n > 1 else 1.0
+        return nx.spring_layout(G, k=k, iterations=200, seed=42)
+
+    # Level 1: position community centroids
+    meta = nx.Graph()
+    for i in range(len(communities)):
+        meta.add_node(i)
+    for u, v in UG.edges():
+        cu = next(i for i, c in enumerate(communities) if u in c)
+        cv = next(i for i, c in enumerate(communities) if v in c)
+        if cu != cv:
+            if meta.has_edge(cu, cv):
+                meta[cu][cv]['weight'] += 1
+            else:
+                meta.add_edge(cu, cv, weight=1)
+    centroids = nx.spring_layout(meta, k=4.0, iterations=300, seed=42)
+
+    # Level 2: position nodes within each community
+    pos = {}
+    for i, comm in enumerate(communities):
+        cx, cy = centroids[i]
+        if len(comm) == 1:
+            pos[list(comm)[0]] = (cx, cy)
+            continue
+        sub = UG.subgraph(comm)
+        k_local = 1.5 / math.sqrt(len(comm))
+        local = nx.spring_layout(sub, k=k_local, iterations=100, seed=42)
+        spread = 0.12 + 0.04 * len(comm)
+        for nd, (lx, ly) in local.items():
+            pos[nd] = (cx + lx * spread, cy + ly * spread)
+    return pos
 
 
 def render_graph(
@@ -21,19 +115,19 @@ def render_graph(
     output_path: Path | str | None = None,
     title: str | None = None,
     dark_mode: bool = False,
-    layout: str = "spring",
+    layout: str = "community",
     auto_open: bool = False
 ) -> go.Figure:
     """Render a graph with interactive Plotly.
-    
+
     Args:
         graph: NetworkX graph, path to GraphML, or list of triples
         output_path: Output HTML file path
         title: Optional title for the visualization
         dark_mode: Whether to use dark mode theme
-        layout: Layout algorithm ('spring', 'circular', 'kamada_kawai', 'shell')
+        layout: Layout algorithm ('community', 'spring', 'circular', 'kamada_kawai', 'shell')
         auto_open: Whether to open in browser after saving
-        
+
     Returns:
         Plotly Figure object
     """
@@ -61,15 +155,26 @@ def render_graph(
             title = "Knowledge Graph"
     
     # 2. Calculate Layout
+    n = G.number_of_nodes()
     if layout == "circular":
         pos = nx.circular_layout(G)
     elif layout == "kamada_kawai":
-        pos = nx.kamada_kawai_layout(G)
+        if n <= 150:
+            pos = nx.kamada_kawai_layout(G)
+        else:
+            k = 3.0 / math.sqrt(n) if n > 1 else 1.0
+            pos = nx.spring_layout(G, k=k, iterations=200, seed=42)
     elif layout == "shell":
         pos = nx.shell_layout(G)
+    elif layout == "spring":
+        k = 3.0 / math.sqrt(n) if n > 1 else 1.0
+        pos = nx.spring_layout(G, k=k, iterations=200, seed=42)
     else:
-        pos = nx.spring_layout(G, k=0.5, iterations=50, seed=42)
-    
+        pos = _community_layout(G)
+
+    # 2b. Resolve node overlaps
+    pos = _resolve_overlaps(pos, G)
+
     # 3. Theme Configuration
     theme = {
         "bg": "#0f172a" if dark_mode else "white",
@@ -79,7 +184,6 @@ def render_graph(
         "node_line": "#1e293b" if dark_mode else "white",
         "color_extracted": "#2563eb",   # Blue — ground truth from extract()
         "color_augmented": "#f59e0b",   # Amber — inferred via augmentation
-        "color_both": "#8b5cf6",        # Violet — present in both
     }
     
     # 4. Build Traces
@@ -95,17 +199,18 @@ def render_graph(
             for key, value in edge_attrs.items():
                 hover_text += f"<b>{key}:</b> {value}<br>"
         
-        # Line style (dashed for augmented if present)
+        # Color edges by inference type
         is_augmented = edge_attrs.get("inference") == "contextual"
-        line_style = dict(width=1.5, color=theme["edge"])
         if is_augmented:
-            line_style["dash"] = "dash"
-            line_style["width"] = 1
-        
+            line_style = dict(width=1, color=theme["color_augmented"], dash="dash")
+        else:
+            line_style = dict(width=1.5, color=theme["color_extracted"])
+
         edge_traces.append(go.Scatter(
             x=[x0, x1, None], y=[y0, y1, None],
             mode='lines',
             line=line_style,
+            opacity=0.45,
             hoverinfo='skip',
             showlegend=False
         ))
@@ -122,44 +227,52 @@ def render_graph(
                 showlegend=False
             ))
     
-    # Classify each node by origin: extracted, augmented, or both
-    node_origin: dict[str, set[str]] = {node: set() for node in G.nodes()}
+    # Classify each node: explicit takes priority over contextual
+    nodes_in_explicit: set[str] = set()
+    nodes_in_contextual: set[str] = set()
     for u, v, edge_attrs in G.edges(data=True):
-        inference = edge_attrs.get("inference", "explicit")
-        origin = "augmented" if inference == "contextual" else "extracted"
-        node_origin[u].add(origin)
-        node_origin[v].add(origin)
+        if edge_attrs.get("inference") == "contextual":
+            nodes_in_contextual.add(u)
+            nodes_in_contextual.add(v)
+        else:
+            nodes_in_explicit.add(u)
+            nodes_in_explicit.add(v)
 
     origin_colors = {
         "Extracted": theme["color_extracted"],
         "Augmented": theme["color_augmented"],
-        "Both": theme["color_both"],
     }
 
-    # Group nodes by origin category
-    origin_groups: dict[str, list] = {"Extracted": [], "Augmented": [], "Both": []}
+    # Group nodes: Extracted if in any explicit edge, Augmented only if exclusively contextual
+    origin_groups: dict[str, list] = {"Extracted": [], "Augmented": []}
     for node, attrs in G.nodes(data=True):
-        origins = node_origin[node]
-        if origins == {"extracted", "augmented"}:
-            category = "Both"
-        elif "augmented" in origins:
+        if node in nodes_in_explicit:
+            category = "Extracted"
+        elif node in nodes_in_contextual:
             category = "Augmented"
         else:
-            category = "Extracted"
+            category = "Extracted"  # Isolated nodes default to Extracted
         origin_groups[category].append((node, attrs))
 
+    max_label_len = 25
     node_traces = []
     for category, nodes in origin_groups.items():
         if not nodes:
             continue
-        nx_list, ny_list, texts, hovers, sizes = [], [], [], [], []
+        nx_list, ny_list, texts, hovers, sizes, font_sizes = [], [], [], [], [], []
         for node, attrs in nodes:
             x, y = pos[node]
             nx_list.append(x)
             ny_list.append(y)
-            texts.append(f"<b>{node}</b>")
 
             degree = G.degree(node)
+            if degree >= 3:
+                label = node if len(node) <= max_label_len else node[:max_label_len] + "..."
+                texts.append(f"<b>{label}</b>")
+            else:
+                texts.append("")
+            font_sizes.append(9 + min(degree, 10))
+
             hover = f"<b>{node}</b><br><br>"
             if attrs:
                 for k, v in attrs.items():
@@ -175,7 +288,7 @@ def render_graph(
             name=category,
             text=texts,
             textposition="top center",
-            textfont=dict(size=11, color=theme["text"]),
+            textfont=dict(size=font_sizes, color=theme["text"]),
             hovertemplate='%{hovertext}<extra></extra>',
             hovertext=hovers,
             marker=dict(
@@ -213,8 +326,8 @@ def render_graph(
         )],
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        width=1200,
-        height=800
+        width=1400,
+        height=900
     )
     
     # 6. Save
