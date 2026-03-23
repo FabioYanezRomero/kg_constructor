@@ -112,6 +112,11 @@ class LMStudioLanguageModel(OpenAILanguageModel):
             response = self._client.chat.completions.create(**api_params)
             output_text = response.choices[0].message.content
 
+            # Sanitize control characters that break JSON parsing
+            if output_text:
+                import re
+                output_text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', ' ', output_text)
+
             return core_types.ScoredOutput(score=1.0, output=output_text)
 
         except Exception as e:

@@ -65,6 +65,9 @@ TIMEOUT=300  # Higher timeout for local models
 
 set -e  # Exit on error
 
+# Record start time for total duration
+PIPELINE_START=$(date +%s)
+
 echo "================================================================================"
 echo "KNOWLEDGE GRAPH EXTRACTION - SINGLE TEXT TEST (LM Studio)"
 echo "Using Typer CLI for unified command-line interface"
@@ -225,11 +228,38 @@ if [ "$CREATE_EXTRACTION_VIZ" = true ]; then
 fi
 
 # ================================================================================
+# WRITE METADATA
+# ================================================================================
+PIPELINE_END=$(date +%s)
+PIPELINE_DURATION=$((PIPELINE_END - PIPELINE_START))
+
+$PYTHON -c "
+import json, datetime
+metadata = {
+    'provider': '$MODEL_PROVIDER',
+    'model': '$MODEL_NAME',
+    'domain': '$DOMAIN',
+    'mode': '$MODE',
+    'record_ids': '$RECORD_IDS',
+    'temperature': $TEMPERATURE,
+    'max_disconnected': $MAX_DISCONNECTED,
+    'max_iterations': $MAX_ITERATIONS,
+    'max_workers': $MAX_WORKERS,
+    'timeout': $TIMEOUT,
+    'timestamp': datetime.datetime.now().isoformat(),
+    'total_duration_seconds': $PIPELINE_DURATION,
+}
+with open('$OUTPUT_DIR/metadata.json', 'w') as f:
+    json.dump(metadata, f, indent=2)
+print(f'  Metadata written ({$PIPELINE_DURATION}s total)')
+"
+
+# ================================================================================
 # SUMMARY
 # ================================================================================
 echo ""
 echo "================================================================================"
-echo "SUCCESS! All files generated in: $OUTPUT_DIR"
+echo "SUCCESS! All files generated in: $OUTPUT_DIR  (${PIPELINE_DURATION}s)"
 echo "================================================================================"
 echo ""
 echo "View the results:"

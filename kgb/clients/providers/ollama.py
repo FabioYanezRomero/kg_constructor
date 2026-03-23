@@ -25,15 +25,31 @@ class OllamaOpenAILanguageModel(OpenAILanguageModel):
         """Ollama/LM Studio output needs fences when not using structured mode."""
         return True
 
+    @staticmethod
+    def _sanitize_control_chars(text: str) -> str:
+        """Remove invalid JSON control characters from LLM output.
+
+        Some local models emit raw control characters (tabs, newlines, etc.)
+        inside JSON string values, which causes json.loads() to fail with
+        'Invalid control character'.  We replace them with spaces.
+        """
+        import re
+        # Replace control chars (U+0000–U+001F) except \n \r \t which are
+        # commonly present in fenced output and handled by langextract.
+        # Inside JSON *strings* these are illegal, but we can't easily
+        # distinguish string-interior vs structural whitespace here, so we
+        # only strip the truly unusual ones (NUL, BEL, BS, VT, FF, etc.).
+        return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', ' ', text)
+
     def _process_single_prompt(self, prompt: str, config: dict[str, Any]) -> core_types.ScoredOutput:
         """Override to remove response_format and add logging."""
         try:
             # Get model configuration
             model_config = self.merge_kwargs(config)
-            
+
             # Explicitly remove response_format as it can cause issues in Ollama/LM Studio
             model_config.pop('response_format', None)
-            
+
             # Standard system message for JSON
             system_message = (
                 "You are a helpful assistant that extracts information into structured JSON. "
@@ -59,6 +75,10 @@ class OllamaOpenAILanguageModel(OpenAILanguageModel):
 
             response = self._client.chat.completions.create(**api_params)
             output_text = response.choices[0].message.content
+
+            # Sanitize control characters that break JSON parsing
+            if output_text:
+                output_text = self._sanitize_control_chars(output_text)
 
             return core_types.ScoredOutput(score=1.0, output=output_text)
 
