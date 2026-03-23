@@ -5,7 +5,7 @@ This skill documents how to add a new visualization type to the `kgb/visualizati
 ## Overview
 
 Visualizations render knowledge graphs as interactive HTML. The system provides:
-- **Network topology** (`graph_viz.py`) — Plotly + NetworkX graph with origin-based coloring
+- **Network topology** (`graph_viz.py`) — Cytoscape.js + NetworkX graph with origin-based coloring, node dragging, search/filter, and context menus
 - **Text highlighting** (`text_viz.py`) — langextract-based entity highlighting in source text
 - Extensible architecture for custom visualizations
 
@@ -19,11 +19,13 @@ Visualizations render knowledge graphs as interactive HTML. The system provides:
     │  ├─ render_graph()        ├─ TextVisualizer        │
     │  ├─ batch_render_graphs() │   ├─ render_triples_   │
     │  │                        │   │   in_text()        │
-    │  │  Plotly + NetworkX     │   ├─ save_html()       │
+    │  │  Cytoscape.js          │   ├─ save_html()       │
     │  │  Node/edge topology    │   └─ batch_render()    │
     │  │  Origin coloring       │                        │
     │  │  (Extracted/Augmented) │   langextract-based    │
-    │  │                        │   Entity highlighting  │
+    │  │  Node dragging         │   Entity highlighting  │
+    │  │  Search/filter         │                        │
+    │  │  Context menus         │                        │
     │  │                        │                        │
     │  │  your_viz.py                                    │
     │  │  └─ Your new visualization                      │
@@ -35,15 +37,17 @@ Data Flow:
 ```
 
 **Key Files:**
-- `kgb/visualization/graph_viz.py` — Graph topology (Plotly + NetworkX)
+- `kgb/visualization/graph_viz.py` — Graph topology (Cytoscape.js + NetworkX)
 - `kgb/visualization/text_viz.py` — Text entity highlighting (langextract)
 - `kgb/visualization/__init__.py` — Public exports
 
 ## Dependencies
 
 **Required:**
-- `networkx>=3.0` — Graph data structures and layouts
-- `plotly>=5.0` — Interactive HTML visualizations
+- `networkx>=3.0` — Graph data structures and layout computation
+- Cytoscape.js v3.30.4 (CDN) — Interactive graph rendering in the browser
+- cytoscape-dagre (CDN) — Hierarchical layout plugin
+- cytoscape-cxtmenu (CDN) — Right-click context menu plugin
 
 **Optional:**
 - `langextract` — For text-based entity highlighting
@@ -58,7 +62,8 @@ Key features to understand:
 - **Edge styling**: Solid lines for extracted edges, dashed for augmented
 - **Inference detection**: Uses `edge_attrs.get("inference") == "contextual"` to classify
 - **Theme system**: Dark/light mode via theme dict
-- **Layout algorithms**: spring, circular, kamada_kawai, shell
+- **Layout algorithms**: cose (force-directed), circle, dagre (hierarchical) — switchable in-browser
+- **Interactive features**: Node dragging, search/filter bar, right-click context menus, path finder, export (PNG/SVG/JSON)
 
 ### text_viz.py — `TextVisualizer`
 
@@ -367,7 +372,7 @@ def test_timeline_dark_mode(tmp_path):
 |-----------|---------------|
 | **Dark Mode** | Use theme dict with conditional colors (follow `graph_viz.py` pattern) |
 | **Type Safety** | Accept `Path \| list[Triple] \| list[dict]` with isinstance checks |
-| **Self-Containment** | Use Plotly's default JS bundling for portability |
+| **Self-Containment** | Use CDN scripts (cytoscape.js, dagre, cxtmenu) for portability |
 | **Error Handling** | Raise `ValueError` for invalid inputs, `FileNotFoundError` for missing files |
 | **Inference Awareness** | Use `inference.value` (not `str(inference)`) — `"explicit"` / `"contextual"` |
 

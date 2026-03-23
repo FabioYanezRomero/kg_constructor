@@ -8,7 +8,7 @@ A modular system for extracting knowledge graphs from text using multiple LLM ba
 - **Knowledge Graph Extraction** — Structured triples (head-relation-tail) with source grounding via [langextract](https://github.com/langextract/langextract)
 - **Graph Augmentation** — Iterative strategies to bridge disconnected components
 - **Origin Tracking** — Every triple tagged as `explicit` (extracted) or `contextual` (augmented)
-- **Interactive Visualizations** — Plotly network graphs with origin-based coloring and entity text highlighting
+- **Interactive Visualizations** — Cytoscape.js interactive network graphs with node dragging, search/filter, and context menus; entity text highlighting
 - **Domain System** — Customizable prompts, examples, and schema constraints per knowledge domain
 - **Pipeline Orchestration** — YAML-driven or flag-based multi-step pipelines
 - **Multiple I/O Formats** — JSONL, JSON, CSV input; GraphML output
@@ -132,7 +132,7 @@ kgb run-pipeline --input data.jsonl --domain legal --client ollama \
 | `kgb extract` | Extract knowledge graph triples from text |
 | `kgb augment connectivity` | Bridge disconnected graph components |
 | `kgb convert` | Convert JSON triples to GraphML |
-| `kgb visualize network` | Interactive network graph (Plotly) |
+| `kgb visualize network` | Interactive network graph (Cytoscape.js) |
 | `kgb visualize extraction` | Entity highlights in source text (langextract) |
 | `kgb run-pipeline` | Run multi-step pipeline (YAML or flags) |
 | `kgb list domains` | List available knowledge domains |
@@ -167,7 +167,7 @@ test_outputs/single_extraction_20260318_101048/
 │   └── UKSC-2009-0143.json
 ├── graphml/               # NetworkX-compatible GraphML
 │   └── UKSC-2009-0143.graphml
-├── network_viz/           # Interactive Plotly HTML
+├── network_viz/           # Interactive Cytoscape.js HTML
 │   └── UKSC-2009-0143.html
 └── extraction_viz/        # Entity highlighting HTML
     └── UKSC-2009-0143.html
@@ -228,7 +228,7 @@ kgb/
 │   ├── readers/             # JSONL, JSON, CSV loaders
 │   └── writers/             # GraphML converter
 ├── visualization/           # HTML visualization engines
-│   ├── graph_viz.py         # Plotly network graphs (origin coloring)
+│   ├── graph_viz.py         # Cytoscape.js network graphs (origin coloring)
 │   └── text_viz.py          # langextract entity highlighting
 └── pipeline/                # Pipeline orchestration
     ├── runner.py            # PipelineRunner
@@ -236,6 +236,79 @@ kgb/
     ├── config.py            # YAML config loader
     ├── steps/               # Pipeline step implementations
     └── configs/             # Built-in YAML pipeline configs
+```
+
+### Builder Architecture
+
+```mermaid
+flowchart TD
+    CLI["CLI (__main__.py)"] --> Builder
+    subgraph Builder["Builder Module"]
+        EXT["extraction.py<br/>extract_triples()"] --> |"list[Triple]"| AUG["augmentation.py<br/>augment_triples()"]
+        AUG --> |"list[Triple] + metadata"| VAL["validation.py<br/>schema validation"]
+    end
+    Builder --> |"extract()"| Client["LLM Client<br/>(Gemini / Ollama / LMStudio)"]
+    Builder --> |"augment()"| Client
+    Builder --> Domain["Domain<br/>(prompts + examples + schema)"]
+```
+
+### Full System Architecture
+
+```mermaid
+flowchart LR
+    subgraph Input
+        DATA["Data Files<br/>(JSONL/JSON/CSV)"]
+    end
+    subgraph Pipeline["Pipeline Runner"]
+        direction TB
+        EXT["1. Extract"] --> AUG["2. Augment"]
+        AUG --> CONV["3. Convert"]
+        CONV --> VIZ["4. Visualize"]
+    end
+    subgraph IO["I/O Module"]
+        READ["io/readers/<br/>load_records()"]
+        WRITE["io/writers/<br/>json_to_graphml()"]
+    end
+    subgraph Output
+        JSON["JSON Triples"]
+        GML["GraphML"]
+        HTML["Cytoscape.js HTML"]
+    end
+
+    DATA --> READ
+    READ --> Pipeline
+    Pipeline --> WRITE
+    WRITE --> JSON
+    WRITE --> GML
+    Pipeline --> HTML
+```
+
+### Extensibility
+
+```
+    ┌─────────────────────────────────────────────────────────────────┐
+    │                      KGB Extension Points                       │
+    │                                                                 │
+    │  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐ │
+    │  │  LLM Clients  │  │   Domains    │  │ Augmentation Strats   │ │
+    │  │ add-llm-client│  │  add-domain  │  │ add-augmentation-     │ │
+    │  │               │  │              │  │ strategy              │ │
+    │  └──────┬───────┘  └──────┬───────┘  └──────────┬────────────┘ │
+    │         │                 │                      │              │
+    │         ▼                 ▼                      ▼              │
+    │  ┌─────────────────────────────────────────────────────────┐   │
+    │  │              Builder / Pipeline Core                     │   │
+    │  │        extract_triples() → augment_triples()            │   │
+    │  └─────────────────────────────────────────────────────────┘   │
+    │         ▲                 ▲                      ▲              │
+    │         │                 │                      │              │
+    │  ┌──────┴───────┐  ┌─────┴────────┐  ┌─────────┴────────────┐ │
+    │  │  I/O Readers  │  │  I/O Writers  │  │   Visualization      │ │
+    │  │ add-dataset-  │  │ add-converter │  │ add-visualization    │ │
+    │  │ format        │  │              │  │                      │ │
+    │  └──────────────┘  └──────────────┘  └───────────────────────┘ │
+    │                                                                 │
+    └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Patterns
@@ -326,7 +399,9 @@ export GOOGLE_API_KEY="your-key"
 
 - Nodes colored by origin: **blue** (Extracted), **amber** (Augmented), **violet** (Both)
 - Augmented edges rendered with dashed lines
-- Layouts: spring, circular, kamada_kawai, shell
+- Layouts: cose (force-directed), circle, dagre (hierarchical) — switchable in-browser
+- Node dragging, search/filter bar, right-click context menus
+- Path finder, export (PNG/SVG/JSON)
 - Dark mode support
 - Hover tooltips with node degree, origin, and edge attributes
 

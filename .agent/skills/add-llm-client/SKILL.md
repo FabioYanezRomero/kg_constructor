@@ -3,102 +3,90 @@ name: add-llm-client
 description: Adds a new LLM client provider to the clients module. Use when implementing support for a new LLM provider like Anthropic, OpenAI, Groq, or any OpenAI-compatible API.
 ---
 
-# Add LLM Client: New Provider
+# Adding an LLM Client
 
-This skill guides you through adding a new LLM client provider to `kgb/clients/`.
+This skill documents how to add a new LLM client provider to `kgb/clients/`.
 
-## Architecture Overview
+## Overview
+
+LLM clients provide the interface between the extraction pipeline and language model APIs. The system provides:
+- Factory pattern with `@client()` decorator for auto-registration
+- Abstract base class (`BaseLLMClient`) with required methods
+- Configuration via `ClientConfig` dataclass
+- Provider defaults via JSON config files
+
+## Architecture
 
 ```
                           Clients Module
     ┌───────────────────────────────────────────────────────────┐
     │                                                           │
-    │  __init__.py          base.py            config.py        │
-    │  ├─ ClientFactory     ├─ BaseLLMClient   ├─ ClientConfig  │
-    │  └─ get_client()      ├─ LLMClientError  └─ ClientType    │
-    │                       └─ (ABC methods)                    │
+    │  base.py              config.py          factory.py       │
+    │  ├─ BaseLLMClient     ├─ ClientConfig    ├─ ClientFactory │
+    │  └─ LLMClientError    └─ ClientType      └─ @client()    │
+    │                                                           │
+    │  defaults.py                                              │
+    │  └─ load_provider_defaults()  ← reads configs/*.json      │
     │                                                           │
     │  providers/                                               │
-    │  ├─ gemini.py         ← Native SDK (google-generativeai)  │
-    │  ├─ ollama.py         ← OpenAI-compatible local           │
-    │  ├─ lmstudio.py       ← OpenAI-compatible local           │
-    │  └─ your_provider.py  ← Your new client                   │
+    │  ├─ gemini.py         ← Google Gemini (API-based)         │
+    │  ├─ ollama.py         ← Ollama (local, OpenAI-compatible) │
+    │  ├─ lmstudio.py       ← LM Studio (local, OpenAI-compat) │
+    │  └─ your_provider.py  ← Your new client                  │
+    │                                                           │
+    │  configs/                                                 │
+    │  ├─ gemini.json       ← Provider default values           │
+    │  ├─ ollama.json                                           │
+    │  ├─ lmstudio.json                                         │
+    │  └─ your_provider.json                                    │
     │                                                           │
     └───────────────────────────────────────────────────────────┘
 
 Registration Flow:
-  ClientFactory.register("name", YourClient) → ClientFactory.create(config)
+  @client("name") on class → ClientFactory.register() → ClientFactory.create(config)
 ```
-
-**Key Files:**
-- [base.py](file:///app/kgb/clients/base.py) - Abstract base class and exceptions
-- [config.py](file:///app/kgb/clients/config.py) - ClientConfig dataclass
-- [__init__.py](file:///app/kgb/clients/__init__.py) - ClientFactory registry
 
 ## Dependencies
 
-| Component | Library | Version | Purpose |
-|-----------|---------|---------|---------|
-| Base client | `abc` (stdlib) | - | Abstract base class |
-| LLM framework | `langextract>=0.1` | Latest | Structured extraction |
-| OpenAI-compatible | `openai>=1.0` | Latest | API client |
-| Gemini | `google-generativeai>=0.3` | Latest | Google SDK |
-| HTTP | `requests>=2.28` | Latest | API calls |
-| Progress | `tqdm>=4.60` | Latest | Progress bars |
-
----
+| Component | Library | Purpose |
+|-----------|---------|---------|
+| LLM framework | `langextract>=0.1` | Structured extraction with source grounding |
+| OpenAI-compatible | `openai>=1.0` | API client for local servers |
+| HTTP | `requests>=2.28` | Direct API calls |
 
 ## ClientConfig Schema
-
-The configuration dataclass used by all clients:
 
 ```python
 @dataclass
 class ClientConfig:
-    """Configuration for LLM clients.
-    
-    Attributes:
-        client_type: Provider identifier ("gemini", "ollama", "lmstudio")
-        model_id: Model identifier (provider-specific, None = use default)
-        api_key: API key for authenticated providers
-        base_url: Base URL for local servers
-        max_workers: Concurrent request limit
-        batch_length: Chunks per batch (lower for local models)
-        max_char_buffer: Maximum text chunk size
-        show_progress: Display progress bars
-        timeout: Request timeout in seconds
-    """
-    client_type: ClientType = "gemini"
-    model_id: str | None = None
+    client_type: ClientType = "gemini"      # str — no Literal constraint
+    model_id: str | None = None             # None = use provider default
     temperature: float = 0.0
     max_workers: int | None = None
-    batch_length: int | None = None
     max_char_buffer: int = 8000
     show_progress: bool = True
-    api_key: str | None = None
-    base_url: str | None = None
+    extraction_passes: int = 1              # langextract passes
+    batch_length: int | None = None         # langextract batch size
+    api_key: str | None = None              # For API-based clients
+    base_url: str | None = None             # For local server clients
     timeout: int = 120
 ```
 
----
-
 ## Decision Tree
 
-| Scenario | Use This Pattern | Reference |
-|----------|-----------------|-----------|
-| OpenAI-compatible API (Ollama, LM Studio, vLLM) | `openai` SDK | `ollama.py` |
-| Native SDK (Gemini, Anthropic, Cohere) | Provider's Python SDK | `gemini.py` |
-| REST API only | `requests` library | `ollama.py` (generate_json) |
-
----
+| Scenario | Pattern | Reference |
+|----------|---------|-----------|
+| OpenAI-compatible API | `openai` SDK + langextract | `ollama.py`, `lmstudio.py` |
+| Native SDK | Provider's SDK + langextract | `gemini.py` |
+| REST API (augment) | `requests` or `openai` | All providers' `augment()` |
 
 ## Step 1: Understand the Interface
 
-All clients must implement `BaseLLMClient`:
+All clients must implement `BaseLLMClient` (defined in `kgb/clients/base.py`):
 
 ```python
 class BaseLLMClient(ABC):
-    
+
     @abstractmethod
     def extract(
         self,
@@ -110,11 +98,10 @@ class BaseLLMClient(ABC):
         max_tokens: int | None = None,
         **kwargs: Any
     ) -> list[dict[str, Any]]:
-        """Extract with source grounding (char positions)."""
-        pass
-    
+        """Extract with source grounding (char positions via langextract)."""
+
     @abstractmethod
-    def generate_json(
+    def augment(
         self,
         text: str,
         prompt_description: str,
@@ -123,34 +110,48 @@ class BaseLLMClient(ABC):
         max_tokens: int | None = None,
         **kwargs: Any
     ) -> list[dict[str, Any]]:
-        """Generate JSON without char positions (for augmentation)."""
-        pass
-    
-    @abstractmethod
-    def get_model_name(self) -> str:
-        """Return model identifier (e.g., 'ollama/llama3.1')."""
-        pass
-    
-    @abstractmethod
-    def supports_structured_output(self) -> bool:
-        """Check if provider supports JSON mode."""
-        pass
-    
+        """Generate inferred triples for graph augmentation.
+
+        Unlike extract(), this does NOT ground in source text (no char positions).
+        Used for high-level inference and bridging over an existing graph.
+        """
+
     @classmethod
     @abstractmethod
     def from_config(cls, config: ClientConfig) -> BaseLLMClient:
-        """Factory method for CLI integration."""
-        pass
+        """Factory method to create client from configuration."""
 ```
 
----
+### extract() vs augment()
 
-## Step 2: Implement Your Client
+| | `extract()` | `augment()` |
+|---|---|---|
+| **Purpose** | Extract triples grounded in source text | Generate inferred bridging triples |
+| **Source grounding** | Yes — char_start/char_end positions | No — no position tracking |
+| **Mechanism** | Uses langextract's full pipeline | Direct LLM call (no langextract) |
+| **Inference type** | `InferenceType.EXPLICIT` | `InferenceType.CONTEXTUAL` |
+| **Called by** | `builder/extraction.py` | `builder/augmentation.py` |
+
+## Step 2: Create Provider Defaults
+
+Create `kgb/clients/configs/groq.json`:
+
+```json
+{
+  "model_id": "llama-3.1-70b-versatile",
+  "base_url": "https://api.groq.com/openai/v1",
+  "max_workers": 10
+}
+```
+
+These defaults are loaded by `load_provider_defaults("groq")` when no explicit value is provided.
+
+## Step 3: Implement Your Client
 
 Create `kgb/clients/providers/groq.py`:
 
 ```python
-"""Groq cloud inference client implementation."""
+"""Groq cloud inference client."""
 
 from __future__ import annotations
 
@@ -161,138 +162,88 @@ import langextract as lx
 from langextract.providers.openai import OpenAILanguageModel
 
 from ..base import BaseLLMClient, LLMClientError
+from ..defaults import load_provider_defaults
+from ..factory import client
 
 if TYPE_CHECKING:
     from ..config import ClientConfig
 
 
+@client("groq")
 class GroqClient(BaseLLMClient):
-    """Client for Groq cloud inference.
-    
-    Groq provides ultra-fast inference for open models like Llama and Mixtral.
-    Uses OpenAI-compatible API.
-    """
-    
+    """Client for Groq cloud inference."""
+
     def __init__(
         self,
         model_id: str = "llama-3.1-70b-versatile",
         api_key: str | None = None,
         base_url: str = "https://api.groq.com/openai/v1",
         max_workers: int = 10,
-        batch_length: int = 10,
         max_char_buffer: int = 8000,
         show_progress: bool = True,
         timeout: int = 60,
+        batch_length: int | None = None,
     ) -> None:
-        """Initialize Groq client.
-        
-        Args:
-            model_id: Groq model name (e.g., "llama-3.1-70b-versatile")
-            api_key: Groq API key (GROQ_API_KEY env var)
-            base_url: Groq API base URL
-            max_workers: Parallel workers (higher for cloud)
-            batch_length: Chunks per batch
-            max_char_buffer: Maximum characters per chunk
-            show_progress: Display progress bars
-            timeout: Request timeout seconds
-        """
         import os
-        
+
         self.model_id = model_id
         self.api_key = api_key or os.getenv("GROQ_API_KEY")
         self.base_url = base_url
         self.max_workers = max_workers
-        self.batch_length = batch_length
         self.max_char_buffer = max_char_buffer
         self.show_progress = show_progress
         self.timeout = timeout
-        
+        self.batch_length = batch_length
+
         if not self.api_key:
-            raise LLMClientError(
-                "Groq API key required. Set GROQ_API_KEY env var or pass api_key."
-            )
-    
+            raise LLMClientError("Groq API key required (set GROQ_API_KEY)")
+
     def extract(
         self,
         text: str,
         prompt_description: str,
         examples: list[Any] | None = None,
         format_type: type | None = None,
-        temperature: float = 0.0,
+        temperature: float | None = None,
         max_tokens: int | None = None,
         **kwargs: Any
     ) -> list[dict[str, Any]]:
-        """Extract with source grounding using langextract.
-        
-        Args:
-            text: Input text to analyze
-            prompt_description: Extraction instructions
-            examples: Few-shot examples (lx.ExampleData format)
-            format_type: Pydantic model for schema
-            temperature: Sampling temperature (0.0 = deterministic)
-            max_tokens: Maximum output tokens
-            
-        Returns:
-            List of extracted items with char_start/char_end positions
-            
-        Raises:
-            LLMClientError: If extraction fails
-        """
+        """Extract with source grounding using langextract."""
         try:
-            # Create langextract language model
             groq_model = OpenAILanguageModel(
                 model_id=self.model_id,
                 api_key=self.api_key,
                 base_url=self.base_url,
                 timeout=self.timeout
             )
-            
-            # Configure langextract extraction
+
             result = lx.extract(
                 text_or_documents=text,
                 prompt_description=prompt_description,
                 examples=examples or [],
                 model=groq_model,
-                temperature=temperature,
+                temperature=temperature or 0.0,
                 max_workers=self.max_workers,
-                batch_length=self.batch_length,
                 max_char_buffer=self.max_char_buffer,
                 show_progress=self.show_progress,
-                use_schema_constraints=False,
-                fence_output=False,  # Groq supports JSON mode
-                fetch_urls=False,
             )
-            
-            # Extract items from result
+
             items = []
-            if hasattr(result, 'extractions') and result.extractions:
+            if hasattr(result, 'extractions'):
                 for extraction in result.extractions:
-                    attrs = extraction.attributes
-                    if attrs is None:
-                        continue
-                    
-                    item = dict(attrs)
-                    
-                    # Add source grounding
-                    if extraction.char_interval:
-                        item["char_start"] = extraction.char_interval.start_pos
-                        item["char_end"] = extraction.char_interval.end_pos
-                    else:
-                        item["char_start"] = None
-                        item["char_end"] = None
-                    
-                    item["extraction_text"] = str(extraction.extraction_text)
-                    
-                    # Validate required fields present
-                    if all(k in item for k in ('head', 'relation', 'tail')):
+                    if extraction.attributes:
+                        item = dict(extraction.attributes)
+                        if extraction.char_interval:
+                            item["char_start"] = extraction.char_interval.start_pos
+                            item["char_end"] = extraction.char_interval.end_pos
                         items.append(item)
-            
+
             return items
-            
+
         except Exception as e:
             raise LLMClientError(f"Groq extraction failed: {e}") from e
-    
-    def generate_json(
+
+    def augment(
         self,
         text: str,
         prompt_description: str,
@@ -301,321 +252,203 @@ class GroqClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any
     ) -> list[dict[str, Any]]:
-        """Generate JSON without char positions.
-        
-        Used for augmentation step where source grounding isn't needed.
-        """
+        """Generate inferred triples without source grounding."""
         try:
             from openai import OpenAI
-            
-            client = OpenAI(
+
+            oai = OpenAI(
                 api_key=self.api_key,
                 base_url=self.base_url,
                 timeout=self.timeout
             )
-            
-            schema_json = format_type.model_json_schema()
-            
-            response = client.chat.completions.create(
+
+            response = oai.chat.completions.create(
                 model=self.model_id,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": f"{prompt_description}\n\nReturn JSON matching: {json.dumps(schema_json)}"
-                    },
+                    {"role": "system", "content": prompt_description},
                     {"role": "user", "content": text}
                 ],
                 temperature=temperature or 0.0,
-                max_tokens=max_tokens or 4000,
                 response_format={"type": "json_object"}
             )
-            
-            content = response.choices[0].message.content
-            data = json.loads(content)
-            
-            # Normalize to list
-            if isinstance(data, dict):
-                for key in ["items", "triples", "results"]:
-                    if key in data and isinstance(data[key], list):
-                        return data[key]
-                return [data]
-            
-            return data if isinstance(data, list) else []
-            
+
+            raw = response.choices[0].message.content
+            data = json.loads(raw)
+
+            # Handle both list and nested object responses
+            if isinstance(data, list):
+                return data
+            # Search for a list value in the response
+            for value in data.values():
+                if isinstance(value, list):
+                    return value
+            return [data]
+
         except Exception as e:
-            raise LLMClientError(f"Groq generation failed: {e}") from e
-    
-    def get_model_name(self) -> str:
-        return f"groq/{self.model_id}"
-    
-    def supports_structured_output(self) -> bool:
-        return True  # Groq supports JSON mode
-    
+            raise LLMClientError(f"Groq augmentation failed: {e}") from e
+
     @classmethod
     def from_config(cls, config: "ClientConfig") -> "GroqClient":
-        """Create from ClientConfig.
-        
-        Applies Groq-specific defaults:
-        - model_id: "llama-3.1-70b-versatile"
-        - max_workers: 10 (cloud can handle more)
-        """
+        defaults = load_provider_defaults("groq")
         return cls(
-            model_id=config.model_id or "llama-3.1-70b-versatile",
+            model_id=config.model_id or defaults.get("model_id", "llama-3.1-70b-versatile"),
             api_key=config.api_key,
-            base_url=config.base_url or "https://api.groq.com/openai/v1",
-            max_workers=config.max_workers if config.max_workers is not None else 10,
-            batch_length=config.batch_length if config.batch_length is not None else 10,
+            base_url=config.base_url or defaults.get("base_url", "https://api.groq.com/openai/v1"),
+            max_workers=config.max_workers or defaults.get("max_workers", 10),
             max_char_buffer=config.max_char_buffer,
             show_progress=config.show_progress,
             timeout=config.timeout,
+            batch_length=config.batch_length or defaults.get("batch_length"),
         )
-
-
-__all__ = ["GroqClient"]
 ```
 
----
+## Step 4: Register Client
 
-## Step 3: Register in ClientFactory
-
-Update `kgb/clients/__init__.py`:
+Import your provider in `kgb/clients/providers/__init__.py`:
 
 ```python
-from .providers.groq import GroqClient
+from .gemini import GeminiClient
+from .ollama import OllamaClient
+from .lmstudio import LMStudioClient
+from .groq import GroqClient  # Add this
 
-# Register new client
-ClientFactory.register("groq", GroqClient)
+__all__ = [
+    "GeminiClient",
+    "OllamaClient",
+    "LMStudioClient",
+    "GroqClient",  # Add this
+]
 ```
 
-Update `kgb/clients/config.py` to add the type:
+The `@client("groq")` decorator on the class handles factory registration automatically when the module is imported.
 
-```python
-ClientType = Literal["gemini", "ollama", "lmstudio", "groq"]
-```
+## Step 5: Verify
 
----
-
-## Step 4: Verification
-
-### 4.1 Check Registration
+### Check Registration
 
 ```bash
 python -c "from kgb.clients import ClientFactory; print(ClientFactory.get_available_clients())"
 # Output: ['gemini', 'ollama', 'lmstudio', 'groq']
 ```
 
-### 4.2 Unit Tests
+### Unit Tests
 
 ```python
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from kgb.clients import ClientFactory, ClientConfig
 from kgb.clients.providers.groq import GroqClient
 from kgb.clients.base import LLMClientError
 
 
-def test_client_registered():
-    """Verify client appears in registry."""
-    assert "groq" in ClientFactory.get_available_clients()
-
-
 def test_client_from_config():
-    """Test factory method creates client correctly."""
+    from kgb.clients import ClientConfig
+
     config = ClientConfig(
         client_type="groq",
-        model_id="mixtral-8x7b-32768",
-        api_key="test-key",
-        timeout=30
+        model_id="mixtral-8x7b",
+        api_key="test-key"
     )
-    
     client = GroqClient.from_config(config)
-    
-    assert client.model_id == "mixtral-8x7b-32768"
+
+    assert client.model_id == "mixtral-8x7b"
     assert client.api_key == "test-key"
-    assert client.timeout == 30
-
-
-def test_client_defaults():
-    """Test default values are applied."""
-    config = ClientConfig(client_type="groq", api_key="test")
-    client = GroqClient.from_config(config)
-    
-    assert client.model_id == "llama-3.1-70b-versatile"
-    assert client.max_workers == 10
-    assert client.base_url == "https://api.groq.com/openai/v1"
 
 
 def test_missing_api_key():
-    """Test error when API key missing."""
     with pytest.raises(LLMClientError, match="API key required"):
         GroqClient(api_key=None)
 
 
-def test_get_model_name():
-    """Test model name formatting."""
-    client = GroqClient(model_id="llama2", api_key="test")
-    assert client.get_model_name() == "groq/llama2"
+def test_factory_creates_groq():
+    from kgb.clients import ClientFactory, ClientConfig
 
-
-def test_supports_structured_output():
-    """Test structured output detection."""
-    client = GroqClient(api_key="test")
-    assert client.supports_structured_output() is True
+    config = ClientConfig(client_type="groq", api_key="test-key")
+    client = ClientFactory.create(config)
+    assert isinstance(client, GroqClient)
 
 
 @patch('kgb.clients.providers.groq.OpenAI')
-def test_generate_json_success(mock_openai_class):
-    """Test successful JSON generation."""
+def test_augment_success(mock_openai):
     mock_client = MagicMock()
-    mock_openai_class.return_value = mock_client
-    
-    mock_response = Mock()
-    mock_response.choices = [Mock(message=Mock(content='{"head": "A", "relation": "r", "tail": "B"}'))]
+    mock_openai.return_value = mock_client
+    mock_response = Mock(choices=[Mock(message=Mock(content='[{"head": "A", "relation": "r", "tail": "B"}]'))])
     mock_client.chat.completions.create.return_value = mock_response
-    
+
     client = GroqClient(api_key="test")
-    result = client.generate_json(
-        text="Test text",
-        prompt_description="Extract",
-        format_type=dict
-    )
-    
+    result = client.augment("text", "desc", dict)
+
     assert result == [{"head": "A", "relation": "r", "tail": "B"}]
 
 
 @patch('kgb.clients.providers.groq.OpenAI')
-def test_generate_json_api_error(mock_openai_class):
-    """Test API error handling."""
-    mock_client = MagicMock()
-    mock_openai_class.return_value = mock_client
-    mock_client.chat.completions.create.side_effect = Exception("API timeout")
-    
-    client = GroqClient(api_key="test")
-    
-    with pytest.raises(LLMClientError, match="generation failed"):
-        client.generate_json(
-            text="Test",
-            prompt_description="Extract",
-            format_type=dict
-        )
-```
+def test_augment_error(mock_openai):
+    mock_openai.return_value.chat.completions.create.side_effect = Exception("API error")
 
----
+    client = GroqClient(api_key="test")
+    with pytest.raises(LLMClientError, match="failed"):
+        client.augment("text", "desc", dict)
+```
 
 ## Input/Output Examples
 
-### Extract Method (with char positions)
+### extract() — with char positions (source grounded)
 
-**Input:**
 ```python
 client.extract(
-    text="PharmaCorp developed X-123 drug in 2024.",
-    prompt_description="Extract company-product relationships",
-    examples=[...],  # Few-shot examples
-    temperature=0.0
+    text="PharmaCorp developed X-123.",
+    prompt_description="Extract relationships"
 )
+# Output:
+[{"head": "PharmaCorp", "relation": "developed", "tail": "X-123",
+  "char_start": 0, "char_end": 26}]
 ```
 
-**Output:**
-```python
-[
-    {
-        "head": "PharmaCorp",
-        "relation": "developed",
-        "tail": "X-123",
-        "inference": "explicit",
-        "char_start": 0,
-        "char_end": 26,
-        "extraction_text": "PharmaCorp developed X-123"
-    }
-]
-```
+### augment() — without char positions (inferred)
 
-### Generate JSON Method (without char positions)
-
-**Input:**
 ```python
-client.generate_json(
-    text="Alice knows Bob. Bob works at Acme.",
-    prompt_description="Generate bridging triples",
+client.augment(
+    text="<augmentation prompt with components>",
+    prompt_description="Generate bridging triples to connect disconnected components",
     format_type=Triple
 )
+# Output:
+[{"head": "Alice", "relation": "connected_to", "tail": "Acme",
+  "inference": "contextual", "justification": "..."}]
 ```
-
-**Output:**
-```python
-[
-    {
-        "head": "Alice",
-        "relation": "connected_to",
-        "tail": "Acme",
-        "inference": "contextual"
-    }
-]
-```
-
----
 
 ## CLI Usage
 
 ```bash
-# Use your new client
 kgb extract --input data.jsonl --domain legal --client groq
-
-# With custom model
-kgb extract --input data.jsonl --domain legal --client groq --model mixtral-8x7b-32768
-
-# With API key
-kgb extract --input data.jsonl --domain legal --client groq --api-key sk-xxx
+kgb extract --input data.jsonl --client groq --model mixtral-8x7b
+kgb augment connectivity --input data.jsonl --domain legal --client groq
 ```
-
----
 
 ## Key Principles
 
-| Principle | Implementation | Example |
-|-----------|---------------|---------|
-| **Exception Wrapping** | Wrap all errors in `LLMClientError` | `raise LLMClientError(...) from e` |
-| **Lazy Dependencies** | Import SDKs inside methods | `from openai import OpenAI` |
-| **Provider Defaults** | Apply in `from_config()` | `model_id or "llama3.1"` |
-| **Model Name Format** | Use `provider/model` pattern | `"groq/llama-3.1-70b"` |
+| Principle | Implementation |
+|-----------|---------------|
+| **Exception Wrapping** | `raise LLMClientError(...) from e` |
+| **Lazy Dependencies** | Import SDKs inside methods |
+| **Provider Defaults** | JSON file in `configs/` + `load_provider_defaults()` |
+| **Registration** | `@client("name")` decorator auto-registers with factory |
 
----
+## Files to Create/Modify
 
-## Error Handling Reference
-
-| Exception | When | Action |
-|-----------|------|--------|
-| `LLMClientError` | API failure, timeout, parse error | Wrap with context |
-| `ImportError` | Missing SDK | Catch and raise with install hint |
-
-### Catching Client Errors
-
-```python
-from kgb.clients import ClientFactory, ClientConfig
-from kgb.clients.base import LLMClientError
-
-try:
-    config = ClientConfig(client_type="groq", api_key="test")
-    client = ClientFactory.create(config)
-    result = client.extract(text="...", prompt_description="...")
-except LLMClientError as e:
-    print(f"Client error: {e}")
-    # Handle gracefully
-```
-
----
+| File | Action |
+|------|--------|
+| `kgb/clients/providers/groq.py` | Create — client implementation |
+| `kgb/clients/configs/groq.json` | Create — provider defaults |
+| `kgb/clients/providers/__init__.py` | Modify — add import |
 
 ## Verification Checklist
 
-Before submitting, verify your client:
-
 - [ ] Inherits from `BaseLLMClient`
-- [ ] Implements all 5 abstract methods
-- [ ] `from_config()` applies provider defaults
+- [ ] Implements `extract()`, `augment()`, `from_config()`
+- [ ] Decorated with `@client("name")`
+- [ ] Provider defaults JSON in `configs/`
+- [ ] `from_config()` uses `load_provider_defaults()`
 - [ ] All errors wrapped in `LLMClientError`
-- [ ] Lazy imports for SDK dependencies
-- [ ] Registered in `ClientFactory`
-- [ ] Added to `ClientType` literal
-- [ ] Tests cover factory, defaults, errors
-- [ ] CLI works: `kgb extract --client name`
+- [ ] Imported in `kgb/clients/providers/__init__.py`
+- [ ] `augment()` handles varied JSON response structures
+- [ ] Tests cover factory creation, defaults, errors
