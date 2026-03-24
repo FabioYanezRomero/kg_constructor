@@ -238,50 +238,17 @@ kgb/
     └── configs/             # Built-in YAML pipeline configs
 ```
 
-### Builder Architecture
-
-```mermaid
-flowchart TD
-    CLI["CLI (__main__.py)"] --> Builder
-    subgraph Builder["Builder Module"]
-        EXT["extraction.py<br/>extract_triples()"] --> |"list[Triple]"| AUG["augmentation.py<br/>augment_triples()"]
-        AUG --> |"list[Triple] + metadata"| VAL["validation.py<br/>schema validation"]
-    end
-    Builder --> |"extract()"| Client["LLM Client<br/>(Gemini / Ollama / LMStudio)"]
-    Builder --> |"augment()"| Client
-    Builder --> Domain["Domain<br/>(prompts + examples + schema)"]
-```
-
 ### Full System Architecture
 
-```mermaid
-flowchart LR
-    subgraph Input
-        DATA["Data Files<br/>(JSONL/JSON/CSV)"]
-    end
-    subgraph Pipeline["Pipeline Runner"]
-        direction TB
-        EXT["1. Extract"] --> AUG["2. Augment"]
-        AUG --> CONV["3. Convert"]
-        CONV --> VIZ["4. Visualize"]
-    end
-    subgraph IO["I/O Module"]
-        READ["io/readers/<br/>load_records()"]
-        WRITE["io/writers/<br/>json_to_graphml()"]
-    end
-    subgraph Output
-        JSON["JSON Triples"]
-        GML["GraphML"]
-        HTML["Cytoscape.js HTML"]
-    end
+![KGB Architecture](images/Architecture.png)
 
-    DATA --> READ
-    READ --> Pipeline
-    Pipeline --> WRITE
-    WRITE --> JSON
-    WRITE --> GML
-    Pipeline --> HTML
-```
+The system is orchestrated by the **Pipeline**, driven by the **CLI**. I/O Readers load input data, the **Client** communicates with LLM backends, the **Builder** manages extraction/augmentation logic, and the **Domain** provides prompts, examples, and schema constraints. I/O Writers produce GraphML output and the **Visualization** module generates interactive HTML views.
+
+### Builder Architecture
+
+![KGB Builder](images/Builder.png)
+
+The Builder module coordinates extraction and augmentation. **Extract** uses langextract for source-grounded triples; **Augment** generates bridging triples via direct LLM inference. Both rely on the **Client** abstraction (BaseLLMClient / ClientFactory) and the **Domain** system (KnowledgeDomain / DomainRegistry) for prompts, few-shot examples, and entity/relation type constraints. The **Validation** subsystem normalizes and validates triples against schema constraints.
 
 ### Extensibility
 
