@@ -4,6 +4,15 @@
 # Quick API Key Setup Script
 ################################################################################
 
+if [ -d "/app/kgb" ]; then
+    BASE_DIR="/app"
+else
+    BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+fi
+
+ENV_FILE="${BASE_DIR}/.env"
+TEST_SCRIPT="scripts/test_single_extraction_gemini.sh"
+
 echo "================================================================================"
 echo "Gemini API Key Setup"
 echo "================================================================================"
@@ -21,21 +30,21 @@ if [ -n "$LANGEXTRACT_API_KEY" ] || [ -n "$GOOGLE_API_KEY" ]; then
     fi
     echo ""
     echo "You can run the test script now:"
-    echo "  ./test_single_extraction.sh"
+    echo "  bash ${TEST_SCRIPT}"
     echo ""
     exit 0
 fi
 
 # Check if .env exists
-if [ -f "/app/.env" ]; then
-    source /app/.env
+if [ -f "$ENV_FILE" ]; then
+    source "$ENV_FILE"
     if [ -n "$LANGEXTRACT_API_KEY" ] || [ -n "$GOOGLE_API_KEY" ]; then
         echo "✓ API key found in .env file!"
         echo ""
         echo "The test script will automatically load it."
         echo ""
         echo "You can run the test script now:"
-        echo "  ./test_single_extraction.sh"
+        echo "  bash ${TEST_SCRIPT}"
         echo ""
         exit 0
     fi
@@ -63,16 +72,16 @@ case $choice in
             exit 1
         fi
 
-        echo "LANGEXTRACT_API_KEY=$api_key" > /app/.env
-        chmod 600 /app/.env  # Secure the file
+        echo "LANGEXTRACT_API_KEY=$api_key" > "$ENV_FILE"
+        chmod 600 "$ENV_FILE"  # Secure the file
 
         echo ""
-        echo "✓ API key saved to /app/.env"
+        echo "✓ API key saved to $ENV_FILE"
         echo ""
         echo "The test script will automatically load it."
         echo ""
         echo "You can run the test script now:"
-        echo "  ./test_single_extraction.sh"
+        echo "  bash ${TEST_SCRIPT}"
         echo ""
         ;;
 
@@ -98,7 +107,7 @@ case $choice in
         echo "  echo 'export LANGEXTRACT_API_KEY=\"$api_key\"' >> ~/.bashrc"
         echo ""
         echo "You can run the test script now:"
-        echo "  ./test_single_extraction.sh"
+        echo "  bash ${TEST_SCRIPT}"
         echo ""
         ;;
 
@@ -113,8 +122,8 @@ case $choice in
         echo "Then choose one of these methods:"
         echo ""
         echo "METHOD 1: Create .env file (recommended)"
-        echo "  echo 'LANGEXTRACT_API_KEY=your-api-key-here' > /app/.env"
-        echo "  chmod 600 /app/.env"
+        echo "  echo 'LANGEXTRACT_API_KEY=your-api-key-here' > $ENV_FILE"
+        echo "  chmod 600 $ENV_FILE"
         echo ""
         echo "METHOD 2: Export environment variable (current session)"
         echo "  export LANGEXTRACT_API_KEY='your-api-key-here'"
@@ -124,7 +133,7 @@ case $choice in
         echo "  source ~/.bashrc"
         echo ""
         echo "METHOD 4: Set in test script (not recommended)"
-        echo "  nano test_single_extraction.sh"
+        echo "  nano $TEST_SCRIPT"
         echo "  # Uncomment and set: GEMINI_API_KEY=\"your-api-key-here\""
         echo ""
         echo "================================================================================"

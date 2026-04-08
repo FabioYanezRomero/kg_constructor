@@ -7,12 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     VLLM_URL=http://localhost:8000 \
     OUTPUT_DIR=/app/data/output
 
-COPY requirements.txt ./
 COPY pyproject.toml ./
 RUN apt-get update && apt-get install -y --no-install-recommends \
         wget git procps ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir -r requirements.txt
+    && pip install --no-cache-dir --upgrade pip
 
 COPY kgb ./kgb
 COPY README.md ./

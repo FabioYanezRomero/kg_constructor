@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "KGB - Knowledge Graph Builder: Extract, augment, convert, and visualize knowledge graphs from text"
 requires-python = ">=3.11"
 dependencies = [
+    "absl-py>=2.0.0",
     "datasets>=2.19.0,<4.0.0",
     "requests>=2.31.0",
     "typer>=0.9.0",
@@ -17,6 +18,7 @@ dependencies = [
     "langextract[openai]",
     "python-dotenv>=1.0.0",
     "google-generativeai>=0.3.0",
+    "pydantic>=2.0.0",
     "rich>=13.0.0",
     "pyyaml>=6.0",
 ]

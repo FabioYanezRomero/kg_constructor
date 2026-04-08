@@ -9,6 +9,27 @@
 
 set -e  # Exit on error
 
+BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [ -x "${BASE_DIR}/.venv/bin/python" ]; then
+    PYTHON="${BASE_DIR}/.venv/bin/python"
+else
+    PYTHON=""
+    for candidate in python3.13 python3.12 python3.11 python3 python; do
+        if command -v "$candidate" >/dev/null 2>&1 \
+            && "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
+            PYTHON="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -z "$PYTHON" ] || ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
+    echo "ERROR: Python 3.11+ is required. Selected interpreter: $PYTHON"
+    [ -n "$PYTHON" ] && "$PYTHON" --version 2>/dev/null || true
+    exit 1
+fi
+
 # Default values
 INPUT_FILE=""
 DOMAIN=""
@@ -66,19 +87,19 @@ start_time=$(date +%s)
 
 # Step 1: Extraction
 echo "Step 1: Extracting triples..."
-python3 -m kgb extract --input "$INPUT_FILE" --domain "$DOMAIN" --output-dir "$OUTPUT_DIR" --client "$CLIENT"
+"$PYTHON" -m kgb extract --input "$INPUT_FILE" --domain "$DOMAIN" --output-dir "$OUTPUT_DIR" --client "$CLIENT"
 
 # Step 2: Augmentation
 echo -e "\nStep 2: Augmenting connectivity..."
-python3 -m kgb augment connectivity --input "$INPUT_FILE" --domain "$DOMAIN" --output-dir "$OUTPUT_DIR" --client "$CLIENT" --max-disconnected "$MAX_DISCONNECTED" --max-iterations "$MAX_ITERATIONS"
+"$PYTHON" -m kgb augment connectivity --input "$INPUT_FILE" --domain "$DOMAIN" --output-dir "$OUTPUT_DIR" --client "$CLIENT" --max-disconnected "$MAX_DISCONNECTED" --max-iterations "$MAX_ITERATIONS"
 
 # Step 3: Conversion
 echo -e "\nStep 3: Converting to GraphML..."
-python3 -m kgb convert --input "$OUTPUT_DIR/extracted_json"
+"$PYTHON" -m kgb convert --input "$OUTPUT_DIR/extracted_json"
 
 # Step 4: Visualization
 echo -e "\nStep 4: Creating visualizations..."
-python3 -m kgb visualize network --input "$OUTPUT_DIR/graphml" --dark-mode
+"$PYTHON" -m kgb visualize network --input "$OUTPUT_DIR/graphml" --dark-mode
 
 echo ""
 echo "=========================================="

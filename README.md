@@ -24,12 +24,18 @@ A modular system for extracting knowledge graphs from text using multiple LLM ba
 make install
 
 # Or manually
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 Requires **Python 3.11+**.
+
+`make install` auto-detects the first available interpreter that is already
+`Python 3.11+` among common commands such as `python3.13`, `python3.12`,
+`python3.11`, `python3`, and `python`.
+If your supported interpreter lives under a different name or path, use
+`make install PYTHON=/path/to/python3.11`.
 
 ### Prerequisites
 
@@ -49,7 +55,7 @@ kgb
 kgb extract --input data.jsonl --domain legal --client gemini
 
 # Full pipeline via script
-bash scripts/test_single_extraction.sh
+bash scripts/test_single_extraction_gemini.sh
 ```
 
 ---
@@ -389,18 +395,14 @@ export GOOGLE_API_KEY="your-key"
 
 ## Extensibility
 
-This project uses Claude agent skills (`.claude/skills/`) for guided extensibility:
+The main extension points are in the codebase itself:
 
-| Skill | What it adds | Key files |
-|-------|-------------|-----------|
-| `add-llm-client` | New LLM provider (e.g., Groq, Anthropic) | `kgb/clients/providers/`, `configs/` |
-| `add-domain` | New knowledge domain with prompts/examples | `kgb/domains/<name>/` |
-| `add-augmentation-strategy` | New graph refinement strategy | `kgb/builder/augmentation.py` |
-| `add-dataset-format` | New input format (e.g., Parquet, Excel) | `kgb/io/readers/` |
-| `add-converter` | New output format (e.g., CSV, RDF) | `kgb/io/writers/` |
-| `add-visualization` | New visualization type | `kgb/visualization/` |
-
-Each skill provides architecture diagrams, complete code templates, CLI integration patterns, and test examples.
+- Add providers under `kgb/clients/providers/` with defaults in `kgb/clients/configs/`
+- Add domains under `kgb/domains/<name>/`
+- Add augmentation strategies in `kgb/builder/augmentation.py`
+- Add readers under `kgb/io/readers/`
+- Add writers under `kgb/io/writers/`
+- Add visualizations under `kgb/visualization/`
 
 ---
 
@@ -410,7 +412,7 @@ Each skill provides architecture diagrams, complete code templates, CLI integrat
 
 ```bash
 # Gemini (requires API key)
-bash scripts/test_single_extraction.sh
+bash scripts/test_single_extraction_gemini.sh
 
 # Ollama (requires local server)
 bash scripts/test_single_extraction_ollama.sh
@@ -437,6 +439,9 @@ kgb extract --input data/legal/legal_background.jsonl --domain legal --client ol
 # Build
 make docker-build
 
+# Smoke test the installed CLI in the image
+docker run --rm kg-constructor list clients
+
 # Interactive session
 make docker-start
 
@@ -444,6 +449,9 @@ make docker-start
 make docker-dev
 make docker-stop
 ```
+
+The image installs the packaged CLI. Repository helper scripts and local datasets are
+meant to be run from a mounted checkout, for example via `make docker-start`.
 
 ---
 

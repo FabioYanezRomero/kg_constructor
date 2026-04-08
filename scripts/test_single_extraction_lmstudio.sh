@@ -20,13 +20,27 @@ if [ -d "/app/kgb" ]; then
     LMSTUDIO_BASE_URL="http://host.docker.internal:1234/v1"  # Docker networking
 else
     BASE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-    # Use venv Python if available (system Python may lack dependencies)
-    if [ -x "${BASE_DIR}/.venv/bin/python" ]; then
-        PYTHON="${BASE_DIR}/.venv/bin/python"
-    else
-        PYTHON="python3"
-    fi
     LMSTUDIO_BASE_URL="http://localhost:1234/v1"  # Local networking
+fi
+
+# Use repo venv when available, otherwise prefer an explicit 3.11 interpreter.
+if [ -x "${BASE_DIR}/.venv/bin/python" ]; then
+    PYTHON="${BASE_DIR}/.venv/bin/python"
+else
+    PYTHON=""
+    for candidate in python3.13 python3.12 python3.11 python3 python; do
+        if command -v "$candidate" >/dev/null 2>&1 \
+            && "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
+            PYTHON="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -z "$PYTHON" ] || ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
+    echo "ERROR: Python 3.11+ is required. Selected interpreter: $PYTHON"
+    [ -n "$PYTHON" ] && "$PYTHON" --version 2>/dev/null || true
+    exit 1
 fi
 
 # Input Data
@@ -39,7 +53,7 @@ RECORD_IDS="UKSC-2009-0143"  # Specific record ID(s) to process (comma-separated
 DOMAIN="legal"  # Use: kgb list domains
 
 # Extraction Mode
-MODE="open"  # Options: open, closed
+MODE="open"  # Options: open, constrained
 
 # Output Configuration
 OUTPUT_DIR="${BASE_DIR}/test_outputs/single_extraction_lmstudio_$(date +%Y%m%d_%H%M%S)"
