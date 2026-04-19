@@ -273,6 +273,258 @@ def connectivity_strategy(
 
 
 # =============================================================================
+# Built-in Entity Resolution Strategy
+# =============================================================================
+
+def _collect_unique_entities(triples: list[Triple]) -> list[str]:
+    """Collect all unique entity strings from triple heads and tails."""
+    entities: set[str] = set()
+    for t in triples:
+        if t.head:
+            entities.add(t.head.strip())
+        if t.tail:
+            entities.add(t.tail.strip())
+    return sorted(entities)
+
+
+def _build_entity_context(entities: list[str], triples: list[Triple]) -> dict[str, list[str]]:
+    """Build a context map: entity → list of triples it appears in.
+
+    This gives the LLM evidence about how each entity is used, so it can
+    make informed decisions about whether two entity names are the same
+    real-world thing (e.g., "Salvino" appearing as head of "served_as → CEO"
+    confirms it's the same as "Michael J. Salvino").
+    """
+    context: dict[str, list[str]] = {e: [] for e in entities}
+    for t in triples:
+        triple_str = f"({t.head}) --[{t.relation}]--> ({t.tail})"
+        h = t.head.strip() if t.head else ""
+        tl = t.tail.strip() if t.tail else ""
+        if h in context:
+            context[h].append(triple_str)
+        if tl in context and tl != h:
+            context[tl].append(triple_str)
+    # Cap per entity to keep prompt manageable
+    for e in context:
+        context[e] = context[e][:8]
+    return context
+
+
+def _parse_entity_mapping(response_text: str) -> dict[str, str]:
+    """Parse LLM response into a variant→canonical mapping.
+
+    The LLM returns a JSON array of {canonical, variants} groups.
+    We invert that into a flat lookup: variant_string → canonical_string.
+    """
+    import json as _json
+    import re as _re
+
+    text = response_text.strip()
+
+    # Strip markdown fences
+    if text.startswith("```"):
+        match = _re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+        if match:
+            text = match.group(1).strip()
+
+    # Find JSON array
+    json_match = _re.search(r'\[[\s\S]*\]', text)
+    if not json_match:
+        return {}
+
+    try:
+        groups = _json.loads(json_match.group(0))
+    except _json.JSONDecodeError:
+        return {}
+
+    mapping: dict[str, str] = {}
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        canonical = group.get("canonical", "").strip()
+        variants = group.get("variants", [])
+        if not canonical or not isinstance(variants, list):
+            continue
+        for v in variants:
+            v_str = str(v).strip()
+            if v_str and v_str != canonical:
+                mapping[v_str] = canonical
+    return mapping
+
+
+def _apply_entity_mapping(
+    triples: list[Triple], mapping: dict[str, str]
+) -> list[Triple]:
+    """Rewrite triple heads/tails using the canonical mapping and deduplicate.
+
+    Matching is case-insensitive because LLMs often return lowercased variants
+    even when the original entities had proper casing.
+    """
+    # Build a case-insensitive lookup
+    ci_mapping: dict[str, str] = {}
+    for variant, canonical in mapping.items():
+        ci_mapping[variant.lower().strip()] = canonical
+
+    seen: set[tuple[str, str, str]] = set()
+    resolved: list[Triple] = []
+    for t in triples:
+        head = t.head.strip() if t.head else t.head
+        tail = t.tail.strip() if t.tail else t.tail
+        head = ci_mapping.get(head.lower(), head) if head else head
+        tail = ci_mapping.get(tail.lower(), tail) if tail else tail
+        key = (head.lower(), t.relation.lower().strip(), tail.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        resolved.append(t.model_copy(update={"head": head, "tail": tail}))
+    return resolved
+
+
+@register_strategy("entity_resolution")
+def entity_resolution_strategy(
+    client: BaseLLMClient,
+    domain: KnowledgeDomain,
+    text: str,
+    triples: list[Triple],
+    *,
+    temperature: float = 0.0,
+    max_tokens: int | None = None,
+    augmentation_prompt_override: str | None = None,
+    **kwargs: Any,
+) -> tuple[list[Triple], dict[str, Any]]:
+    """Entity resolution augmentation: Canonicalize entity names across triples.
+
+    Collects all unique entity strings, asks the LLM to cluster variants
+    and pick canonical names, then rewrites every triple and deduplicates.
+
+    This strategy does NOT generate new triples — it only merges existing
+    entities and removes resulting duplicates.
+
+    Args:
+        client: LLM client
+        domain: Knowledge domain (must have entity_resolution augmentation folder)
+        text: Source text (unused but kept for protocol compatibility)
+        triples: Existing triples to resolve
+        temperature: Sampling temperature
+        max_tokens: Max tokens for LLM
+        augmentation_prompt_override: Override the default prompt
+
+    Returns:
+        Tuple of (resolved_triples, metadata)
+    """
+    import json as _json
+
+    # 1. Collect unique entities and their context (triples they appear in)
+    entities = _collect_unique_entities(triples)
+    if len(entities) <= 1:
+        return triples, {"strategy": "entity_resolution", "status": "skipped", "reason": "<=1 entity"}
+
+    entity_context = _build_entity_context(entities, triples)
+
+    # 2. Load prompt from domain
+    er_component = domain.get_augmentation("entity_resolution")
+    prompt_template = augmentation_prompt_override or er_component.prompt
+    constraints = collect_schema_constraints(domain, er_component.examples)
+
+    # 3. Build prompt with entity list, their graph context, and source text
+    #    The LLM needs to see HOW each entity is used in order to decide
+    #    whether "Salvino" and "Michael J. Salvino" are truly the same.
+    entity_entries = []
+    for e in entities:
+        edges = entity_context.get(e, [])
+        entry = {"name": e, "edges": edges}
+        entity_entries.append(entry)
+
+    record: dict[str, Any] = {"entities": entity_entries}
+    # Include a text excerpt so the LLM has document context for ambiguous cases
+    if text:
+        # Truncate to ~4000 chars to keep prompt size reasonable
+        record["source_text_excerpt"] = text[:4000] + ("..." if len(text) > 4000 else "")
+
+    final_prompt = render_prompt_template(
+        prompt_template,
+        record,
+        schema_guidance=build_schema_guidance(constraints),
+    )
+
+    # 4. Call LLM
+    print(f"  Entity resolution: {len(entities)} unique entities, asking LLM to cluster...", flush=True)
+
+    # We need a raw text response (not structured extraction), so use augment()
+    # with Triple as a dummy format_type. We'll parse the JSON ourselves.
+    raw_results = client.augment(
+        text=final_prompt,
+        prompt_description="Identify entity name variants and map them to canonical names",
+        format_type=Triple,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+    # 5. Parse mapping from response
+    # augment() returns list[dict] — we need to reconstruct the JSON text
+    # The raw response should already be parsed by the client, but the
+    # schema won't match Triple. Fall back to raw response parsing.
+    mapping: dict[str, str] = {}
+
+    # If augment returned dicts with canonical/variants keys, use them directly
+    if raw_results and isinstance(raw_results[0], dict) and "canonical" in raw_results[0]:
+        for group in raw_results:
+            canonical = group.get("canonical", "").strip()
+            variants = group.get("variants", [])
+            if canonical and isinstance(variants, list):
+                for v in variants:
+                    v_str = str(v).strip()
+                    if v_str and v_str != canonical:
+                        mapping[v_str] = canonical
+    else:
+        # Fallback: try to interpret raw_results as the mapping
+        # This handles the case where augment() couldn't parse into Triple schema
+        # and returned raw dicts
+        for item in raw_results:
+            if isinstance(item, dict) and "canonical" in item:
+                canonical = item["canonical"].strip()
+                for v in item.get("variants", []):
+                    v_str = str(v).strip()
+                    if v_str and v_str != canonical:
+                        mapping[v_str] = canonical
+
+    if not mapping:
+        print("  Entity resolution: LLM returned no merge groups", flush=True)
+        return triples, {
+            "strategy": "entity_resolution",
+            "status": "no_merges",
+            "entities_analyzed": len(entities),
+        }
+
+    # 6. Apply mapping
+    resolved_triples = _apply_entity_mapping(triples, mapping)
+
+    # Count stats
+    merged_entities = len(mapping)
+    canonical_targets = len(set(mapping.values()))
+    triples_before = len(triples)
+    triples_after = len(resolved_triples)
+    deduped = triples_before - triples_after
+
+    print(f"  Entity resolution: {merged_entities} variants -> {canonical_targets} canonical names", flush=True)
+    print(f"  Triples: {triples_before} -> {triples_after} ({deduped} duplicates removed)", flush=True)
+
+    metadata = {
+        "strategy": "entity_resolution",
+        "status": "success",
+        "entities_analyzed": len(entities),
+        "merge_groups": canonical_targets,
+        "variants_mapped": merged_entities,
+        "triples_before": triples_before,
+        "triples_after": triples_after,
+        "duplicates_removed": deduped,
+        "mapping": mapping,
+    }
+
+    return resolved_triples, metadata
+
+
+# =============================================================================
 # Main Orchestrator
 # =============================================================================
 
@@ -379,5 +631,6 @@ __all__ = [
     "list_strategies",
     "STRATEGIES",
     "connectivity_strategy",
+    "entity_resolution_strategy",
     "augment_triples",
 ]

@@ -16,9 +16,19 @@ if TYPE_CHECKING:
 @dataclasses.dataclass(init=False)
 class OllamaOpenAILanguageModel(OpenAILanguageModel):
     """Custom OpenAI model for Ollama that removes unsupported response_format."""
-    
+
     def __init__(self, **kwargs):
+        # Extract timeout before super().__init__ discards it via **kwargs
+        self._request_timeout = kwargs.pop("timeout", 600)
         super().__init__(**kwargs)
+        # Recreate OpenAI client with proper timeout for slow local models
+        import openai
+        self._client = openai.OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            organization=self.organization,
+            timeout=self._request_timeout,
+        )
         
     @property
     def requires_fence_output(self) -> bool:
