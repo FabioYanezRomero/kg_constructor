@@ -26,7 +26,10 @@ absl.logging.set_verbosity(absl.logging.ERROR)
 
 import atexit
 import json
-import readline
+try:
+    import readline
+except ImportError:
+    readline = None  # readline unavailable on Windows
 import shlex
 import sys
 from pathlib import Path
@@ -700,6 +703,8 @@ _COMPLETIONS = [
 
 def _setup_readline():
     """Configure readline for history, line editing, and tab completion."""
+    if readline is None:
+        return
     # Load persisted history
     try:
         readline.read_history_file(_HISTORY_FILE)
