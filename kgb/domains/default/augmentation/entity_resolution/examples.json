@@ -1,0 +1,32 @@
+[
+    {
+        "input": {
+            "entities": [
+                "John A. Smith",
+                "John Smith",
+                "Smith",
+                "Dr. Smith",
+                "Acme Corporation",
+                "Acme Corp",
+                "Acme",
+                "the Company",
+                "Board of Directors",
+                "the Board"
+            ]
+        },
+        "output": [
+            {
+                "canonical": "John A. Smith",
+                "variants": ["John A. Smith", "John Smith", "Smith", "Dr. Smith"]
+            },
+            {
+                "canonical": "Acme Corporation",
+                "variants": ["Acme Corporation", "Acme Corp", "Acme", "the Company"]
+            },
+            {
+                "canonical": "Board of Directors",
+                "variants": ["Board of Directors", "the Board"]
+            }
+        ]
+    }
+]

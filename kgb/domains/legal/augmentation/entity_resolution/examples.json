@@ -1,0 +1,74 @@
+[
+    {
+        "input": {
+            "entities": [
+                "Michael J. Salvino",
+                "Michael Salvino",
+                "Salvino",
+                "Defendant Salvino",
+                "DXC Technology Company",
+                "DXC",
+                "DXC common stock",
+                "Section 10(b) of the Exchange Act",
+                "Section 10(b) of the Securities Exchange Act of 1934",
+                "Section 20(a) of the Exchange Act",
+                "Defendants",
+                "All Defendants",
+                "Individual Defendants",
+                "United States District Court for the Eastern District of Virginia"
+            ]
+        },
+        "output": [
+            {
+                "canonical": "Michael J. Salvino",
+                "variants": ["Michael J. Salvino", "Michael Salvino", "Salvino", "Defendant Salvino"]
+            },
+            {
+                "canonical": "DXC Technology Company",
+                "variants": ["DXC Technology Company", "DXC"]
+            },
+            {
+                "canonical": "Section 10(b) of the Securities Exchange Act of 1934",
+                "variants": ["Section 10(b) of the Exchange Act", "Section 10(b) of the Securities Exchange Act of 1934"]
+            },
+            {
+                "canonical": "Defendants",
+                "variants": ["Defendants", "All Defendants"]
+            }
+        ]
+    },
+    {
+        "input": {
+            "entities": [
+                "Lord Hope",
+                "Lord Hope of Craighead",
+                "the appellant",
+                "Mr Norris",
+                "Norris",
+                "UK Supreme Court",
+                "the Court",
+                "Supreme Court",
+                "Tax Tribunal",
+                "the Tribunal"
+            ]
+        },
+        "output": [
+            {
+                "canonical": "Lord Hope of Craighead",
+                "variants": ["Lord Hope", "Lord Hope of Craighead"]
+            },
+            {
+                "canonical": "Mr Norris",
+                "variants": ["Mr Norris", "Norris", "the appellant"]
+            },
+            {
+                "canonical": "UK Supreme Court",
+                "variants": ["UK Supreme Court", "the Court", "Supreme Court"]
+            },
+            {
+                "canonical": "Tax Tribunal",
+                "variants": ["Tax Tribunal", "the Tribunal"]
+            }
+        ]
+    }
+]
