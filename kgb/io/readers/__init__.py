@@ -25,7 +25,7 @@ class DataLoadError(Exception):
 
 
 def detect_format(path: Path) -> str:
-    """Detect file format from extension.
+    """Detect file format from extension. If a directory is given, treat as collection of plain text.
 
     Returns:
         One of: 'jsonl', 'json', 'csv'
@@ -33,16 +33,21 @@ def detect_format(path: Path) -> str:
     Raises:
         DataLoadError: If format cannot be determined
     """
+    if path.is_dir():
+        return "txt"
+
     suffix = path.suffix.lower()
     if suffix == '.jsonl':
         return 'jsonl'
     elif suffix == '.json':
         return 'json'
+    elif suffix == '.txt':
+        return 'txt'
     elif suffix == '.csv':
         return 'csv'
     else:
         raise DataLoadError(
-            f"Unknown file format: {suffix}. Supported: .jsonl, .json, .csv",
+            f"Unknown file format: {suffix}. Supported: .jsonl, .json, .txt, .csv",
             path
         )
 
@@ -80,17 +85,20 @@ def load_records(
         records = _load_jsonl(path)
     elif format_type == 'json':
         records = _load_json(path)
+    elif format_type == 'txt':
+        records = _load_txt(path)
     else:  # csv
         records = _load_csv(path)
 
     # Normalize field names and validate
     normalized = []
     for i, record in enumerate(records):
+        print(f"Record {i} raw keys: {list(record.keys())}")
         if record_ids and str(record[id_field]) not in record_ids:
             continue
         if limit and len(normalized) >= limit:
             break
-
+        print(f"Processing record {i}: {record.get(id_field, 'N/A')}")
         if text_field not in record:
             raise DataLoadError(
                 f"Missing text field '{text_field}' in record {i}",
@@ -157,6 +165,28 @@ def _load_csv(path: Path) -> list[dict[str, Any]]:
         for row in reader:
             records.append(dict(row))
     return records
+
+
+def _load_txt(path: Path) -> list[dict[str, Any]]:
+    """Load a single plain-text file as one extraction record."""
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except UnicodeDecodeError:
+        text = path.read_text(encoding="utf-8-sig").strip()
+    except Exception as e:
+        raise DataLoadError(f"Failed to read TXT file: {e}", path) from e
+
+    if not text:
+        raise DataLoadError("TXT file is empty", path)
+
+    return [
+        {
+            "id": path.stem,
+            "text": text,
+            "source_file": str(path),
+        }
+        # [{"text": "Sample text", "id": "1", "body": "Sample text", "doc_id": "1", "author": "Alice"}]
+    ]
 
 
 __all__ = ["load_records", "detect_format", "DataLoadError"]

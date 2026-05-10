@@ -342,7 +342,7 @@ kgb/domains/legal/
 ```python
 from kgb.domains import get_domain, list_available_domains
 
-print(list_available_domains())  # ['default', 'legal']
+print(list_available_domains())  # ['default', 'legal', 'pathology']
 
 domain = get_domain("legal", extraction_mode="open")
 prompt = domain.extraction.prompt
