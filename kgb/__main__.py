@@ -46,7 +46,7 @@ from rich.table import Table
 
 from .clients import ClientConfig, ClientFactory
 from .io.readers import load_records
-from .io.writers import convert_json_directory
+from .io.writers import convert_json_directory, merge_json_directories
 from .visualization import batch_render_graphs, TextVisualizer
 from .domains import list_available_domains, ExtractionMode
 from .pipeline import (
@@ -553,6 +553,7 @@ def augment_default(ctx: typer.Context):
 def convert(
     input_dir: Path = typer.Option(..., "--input", "-i", help="Directory with JSON triples", exists=True),
     output_dir: Optional[Path] = typer.Option(None, "--output", "-o", help="Output directory for GraphML"),
+    merge: bool = typer.Option(False, "--merge", help="Merge all JSON files into one GraphML"),
 ):
     """Convert JSON triples to GraphML format.
     
@@ -563,11 +564,17 @@ def convert(
     console.print(f"[bold blue]Converting JSON to GraphML[/bold blue]")
     
     graphml_dir = output_dir or input_dir.parent / "graphml"
-    
+    graphml_dir.mkdir(parents=True, exist_ok=True)
+
     try:
-        graphml_files = convert_json_directory(input_dir, graphml_dir)
-        console.print(f"\n[bold green]✓ Converted {len(graphml_files)} files[/bold green]")
-        console.print(f"Output: {graphml_dir}")
+        if merge:
+            output_path = graphml_dir / "merged_graph.graphml"
+            graphml_files = merge_json_directories(input_dir, output_path)
+            console.print(f"\n[bold green]✓ Merged graph: {output_path}[/bold green]")
+        else:
+            graphml_files = convert_json_directory(input_dir, graphml_dir)
+            console.print(f"\n[bold green]✓ Converted {len(graphml_files)} files[/bold green]")
+            console.print(f"Output: {graphml_dir}")
         console.print(f"\n[dim]Next: kgb visualize network --input {graphml_dir}[/dim]")
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")

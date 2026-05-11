@@ -44,12 +44,11 @@ if [ -z "$PYTHON" ] || ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_inf
 fi
 
 # Input Data
-INPUT_FILE="${BASE_DIR}/data/legal/legal_background.jsonl"  # Path to your input file
 INPUT_FILE="${HOME}/sdsHD/sd21c015/DataBaseReports/2025_anonymized/"  # Path to your input file
 TEXT_FIELD="text"  # Field name containing the text to analyze
 ID_FIELD="id"  # Field name containing record IDs
 RECORD_IDS=""  # Specific record ID(s) to process (comma-separated, or empty for all)
-LIMIT_RECORDS=100  # Limit number of records to process (for testing, e.g. 10)
+LIMIT_RECORDS=5  # Limit number of records to process (for testing, e.g. 10)
 
 # Domain Configuration
 DOMAIN="pathology"  # Use: kgb list domains
@@ -199,7 +198,7 @@ echo "==========================================================================
 JSON_DIR="$OUTPUT_DIR/extracted_json"
 GRAPHML_DIR="$OUTPUT_DIR/graphml"
 
-if ! $PYTHON -m kgb convert --input "$JSON_DIR" --output "$GRAPHML_DIR"; then
+if ! $PYTHON -m kgb convert --input "$JSON_DIR" --output "$GRAPHML_DIR" --merge; then
     echo "ERROR: Conversion failed"
     exit 1
 fi
@@ -241,6 +240,7 @@ if [ "$CREATE_EXTRACTION_VIZ" = true ]; then
         --output "$EXTRACTION_VIZ_DIR" \
         --text-field "$TEXT_FIELD" \
         --id-field "$ID_FIELD" \
+        --limit "$LIMIT_RECORDS" \
         --group-by "$GROUP_BY"; then
         echo "WARNING: Extraction visualization failed"
     fi
