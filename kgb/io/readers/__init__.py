@@ -14,6 +14,7 @@ import csv
 import json
 from pathlib import Path
 from typing import Any, Iterator
+from tqdm import tqdm
 
 
 class DataLoadError(Exception):
@@ -25,7 +26,7 @@ class DataLoadError(Exception):
 
 
 def detect_format(path: Path) -> str:
-    """Detect file format from extension.
+    """Detect file format from extension. If a directory is given, treat as collection of plain text.
 
     Returns:
         One of: 'jsonl', 'json', 'csv'
@@ -33,16 +34,21 @@ def detect_format(path: Path) -> str:
     Raises:
         DataLoadError: If format cannot be determined
     """
+    if path.is_dir():
+        return "txt"
+
     suffix = path.suffix.lower()
     if suffix == '.jsonl':
         return 'jsonl'
     elif suffix == '.json':
         return 'json'
+    elif suffix == '.txt':
+        return 'txt'
     elif suffix == '.csv':
         return 'csv'
     else:
         raise DataLoadError(
-            f"Unknown file format: {suffix}. Supported: .jsonl, .json, .csv",
+            f"Unknown file format: {suffix}. Supported: .jsonl, .json, .txt, .csv",
             path
         )
 
@@ -80,17 +86,20 @@ def load_records(
         records = _load_jsonl(path)
     elif format_type == 'json':
         records = _load_json(path)
+    elif format_type == 'txt':
+        records = _load_txt(path, limit=limit)
     else:  # csv
         records = _load_csv(path)
 
     # Normalize field names and validate
     normalized = []
     for i, record in enumerate(records):
+        print(f"Record {i} raw keys: {list(record.keys())}")
         if record_ids and str(record[id_field]) not in record_ids:
             continue
         if limit and len(normalized) >= limit:
             break
-
+        print(f"Processing record {i}: {record.get(id_field, 'N/A')}")
         if text_field not in record:
             raise DataLoadError(
                 f"Missing text field '{text_field}' in record {i}",
@@ -157,6 +166,44 @@ def _load_csv(path: Path) -> list[dict[str, Any]]:
         for row in reader:
             records.append(dict(row))
     return records
+
+
+def _load_txt(path: Path, limit: Optional[int] = None) -> list[dict[str, Any]]:
+    """Load one TXT file or all TXT files in a directory."""
+
+    def read_one(file_path: Path) -> dict[str, Any]:
+        try:
+            text = file_path.read_text(encoding="utf-8").strip()
+        except UnicodeDecodeError:
+            text = file_path.read_text(encoding="utf-8-sig").strip()
+        except Exception as e:
+            raise DataLoadError(f"Failed to read TXT file: {e}", file_path) from e
+
+        if not text:
+            raise DataLoadError("TXT file is empty", file_path)
+
+        return {
+            "id": file_path.stem,
+            "text": text,
+            "source_file": str(file_path),
+        }
+
+    if path.is_dir():
+        txt_files = sorted(path.glob("*.txt"))
+        txt_files = txt_files[:limit] if limit else txt_files
+        if not txt_files:
+            raise DataLoadError("No .txt files found in directory", path)
+
+        reports = []
+        for txt_file in tqdm(txt_files, desc="Loading TXT files"):
+            try:
+                reports.append(read_one(txt_file))
+            except DataLoadError as e:
+                print(f"Warning: Skipping file {txt_file} due to error: {e}")
+            
+        return reports
+
+    return [read_one(path)]
 
 
 __all__ = ["load_records", "detect_format", "DataLoadError"]

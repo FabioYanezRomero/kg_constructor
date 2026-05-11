@@ -22,6 +22,7 @@ from .registry import domain, get_domain, register_domain, list_available_domain
 # Import domains to trigger registration
 from . import legal
 from . import default
+from . import pathology
 
 __all__ = [
     # Base classes and protocols

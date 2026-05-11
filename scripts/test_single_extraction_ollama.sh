@@ -10,7 +10,7 @@
 
 # Model Configuration
 MODEL_PROVIDER="ollama"  # Using Ollama local model
-MODEL_NAME="gemma3:1b"  # Use the model name shown in Ollama (ollama list)
+MODEL_NAME="medgemma:27b"  # Use the model name shown in Ollama (ollama list)
 TEMPERATURE=0.0
 
 # Base directory detection (Docker vs local)
@@ -44,13 +44,14 @@ if [ -z "$PYTHON" ] || ! "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_inf
 fi
 
 # Input Data
-INPUT_FILE="${BASE_DIR}/data/legal/legal_background.jsonl"  # Path to your input file
+INPUT_FILE="${HOME}/sdsHD/sd21c015/DataBaseReports/2025_anonymized/"  # Path to your input file
 TEXT_FIELD="text"  # Field name containing the text to analyze
 ID_FIELD="id"  # Field name containing record IDs
-RECORD_IDS="UKSC-2009-0143"  # Specific record ID(s) to process (comma-separated, or empty for all)
+RECORD_IDS=""  # Specific record ID(s) to process (comma-separated, or empty for all)
+LIMIT_RECORDS=5  # Limit number of records to process (for testing, e.g. 10)
 
 # Domain Configuration
-DOMAIN="legal"  # Use: kgb list domains
+DOMAIN="pathology"  # Use: kgb list domains
 
 # Extraction Mode
 MODE="open"  # Options: open, constrained
@@ -70,7 +71,7 @@ LAYOUT="spring"  # Graph layout (spring, circular, kamada_kawai, shell)
 GROUP_BY="entity_type"  # Options: entity_type, relation
 
 # Processing Options
-MAX_WORKERS=3  # Lower for local models
+MAX_WORKERS=6  # Lower for local models
 TIMEOUT=300  # Higher timeout for local models
 
 ################################################################################
@@ -141,7 +142,9 @@ CLI_OPTS="$CLI_OPTS --mode $MODE"
 CLI_OPTS="$CLI_OPTS --client $MODEL_PROVIDER"
 CLI_OPTS="$CLI_OPTS --text-field $TEXT_FIELD"
 CLI_OPTS="$CLI_OPTS --id-field $ID_FIELD"
-CLI_OPTS="$CLI_OPTS --record-ids $RECORD_IDS"
+if [ -n "$RECORD_IDS" ]; then
+  CLI_OPTS="$CLI_OPTS --record-ids $RECORD_IDS"
+fi
 CLI_OPTS="$CLI_OPTS --temp $TEMPERATURE"
 CLI_OPTS="$CLI_OPTS --timeout $TIMEOUT"
 CLI_OPTS="$CLI_OPTS --base-url $OLLAMA_BASE_URL"
@@ -149,7 +152,9 @@ CLI_OPTS="$CLI_OPTS --base-url $OLLAMA_BASE_URL"
 if [ -n "$MODEL_NAME" ]; then
     CLI_OPTS="$CLI_OPTS --model $MODEL_NAME"
 fi
-
+if [ -n "$LIMIT_RECORDS" ]; then
+    CLI_OPTS="$CLI_OPTS --limit $LIMIT_RECORDS"
+fi
 if [ -n "$MAX_WORKERS" ]; then
     CLI_OPTS="$CLI_OPTS --workers $MAX_WORKERS"
 fi
@@ -193,7 +198,7 @@ echo "==========================================================================
 JSON_DIR="$OUTPUT_DIR/extracted_json"
 GRAPHML_DIR="$OUTPUT_DIR/graphml"
 
-if ! $PYTHON -m kgb convert --input "$JSON_DIR" --output "$GRAPHML_DIR"; then
+if ! $PYTHON -m kgb convert --input "$JSON_DIR" --output "$GRAPHML_DIR" --merge; then
     echo "ERROR: Conversion failed"
     exit 1
 fi
@@ -235,6 +240,7 @@ if [ "$CREATE_EXTRACTION_VIZ" = true ]; then
         --output "$EXTRACTION_VIZ_DIR" \
         --text-field "$TEXT_FIELD" \
         --id-field "$ID_FIELD" \
+        --limit "$LIMIT_RECORDS" \
         --group-by "$GROUP_BY"; then
         echo "WARNING: Extraction visualization failed"
     fi
